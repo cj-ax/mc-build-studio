@@ -468,8 +468,14 @@ def validate_export(b, facing, files, meta, world, derived, bstr):
                         init[p] = v
                     keep_cells[p] = v
     w = World(init)
-    for f in ("setup", *meta["run_order"]):
+    # replay exactly what the player runs: setup, then the build part(s)
+    for f in ("setup", *meta["build_parts"]):
         run_file(w, files, f, origin)
+    for f in meta["build_parts"]:
+        executed = sum(len([l for l in files[g] if l and not l.startswith("#")]) for g in
+                       [x.split("/")[-1] for x in files[f] if x.startswith("function ")]) + len(files[f])
+        if executed > 10000:
+            add(out, "error", "limits", f"[{facing}] {f} runs {executed} commands in one call (limit 10,000)")
     for e in w.errors[:8]:
         add(out, "error", "replay", f"[{facing}] {e}")
 

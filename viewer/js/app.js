@@ -1164,7 +1164,7 @@
       const c = b.commands[S.facing];
       p.append(el("h2", {}, "Commands"),
         el("p", {}, `Facing ${S.facing}: ${fmt(c.total)} commands to build. Functions live in ${b.name}/${S.facing}/ inside the pack.`));
-      for (const f of ["setup", "test_blocks", ...c.run_order, "build", "cleanup"]) {
+      for (const f of ["setup", "test_blocks", ...c.run_order, ...new Set(["build", ...(c.build_parts || [])]), "cleanup"]) {
         const lines = c.files[f];
         if (!lines) continue;
         const pre = el("pre", { style: "display:none" }, lines.join("\n"));
@@ -1190,7 +1190,10 @@
         ["Stand on the marker (the yellow square), or use the positioned commands below.", null],
         ["Load the site, then wait about 5 seconds:", `/function ${ns}/setup`],
         ["Optional: one of every block appears in a strip in front of you:", `/function ${ns}/test_blocks`],
-        ["Build everything:", `/function ${ns}/build`],
+        ...((b.commands[S.facing].build_parts || ["build"]).length > 1
+          ? [[`Build everything, in ${b.commands[S.facing].build_parts.length} parts (one call can run at most 10,000 commands). Run each after the last one says it's done:`,
+              b.commands[S.facing].build_parts.map((f) => `/function ${ns}/${f}`).join("\n")]]
+          : [["Build everything:", `/function ${ns}/build`]]),
         ["Or one step at a time:", order.map((f) => `/function ${ns}/${f}`).join("\n")],
         ["Tidy up (test strip, dropped items, ticking area):", `/function ${ns}/cleanup`],
       ];

@@ -12,7 +12,9 @@ PS5 through a Realm; packs are imported on a phone or PC (`config.json` → `pla
 | `data/` | Mojang bedrock-samples metadata (blocks, entities, commands, version). `python3 data/fetch.py [tag]` refreshes it. Every block ID/state and entity ID is validated against it. |
 | `blocks/palette.py` | The palette: block key → Bedrock id, shape, props + how they map to states, rotation rules, colour, procedural texture, light. Writes `blocks/palette.json` for the viewer. |
 | `lib/voxel.py` | `Model`: `put/box/clear/get/empty/air`, steps (`with m.step(...)`), tags, markers (`door`, `bed`, `entity`), `tall_plant`, `floor` (declares a walkable level). |
-| `lib/roofs.py`, `lib/buildings.py`, `lib/outdoor.py` | Helpers: `gable_roof`, `shed_roof`, `timber_frame` (frame, infill, windows, door, floors, ladders, lanterns), `chimney`, `deck_on_piles`, `stair_run`, `oak_tree`, `spruce_tree`, `bush`, `path`, `fence_ring`, `crop_bed`, `flower_bed`, `lamp_post`, `bench`. All exported from `lib/__init__.py`. |
+| `lib/roofs.py`, `lib/buildings.py`, `lib/outdoor.py` | Helpers: `gable_roof`, `shed_roof`, `two_slope_roof` (gable/saltbox), `hip_roof`, `cross_gable`, `timber_frame`, `chimney`, `deck_on_piles`, `stair_run`, `oak_tree`, `spruce_tree`, `bush`, `path`, `fence_ring`, `crop_bed`, `flower_bed`, `lamp_post`, `bench`. All exported from `lib/__init__.py`. |
+| `lib/houses.py`, `lib/interiors.py` | `clapboard_house` (gable / saltbox / biscuit box, cross gables, verandas, real staircases, attic ladder, partitions, hearth, chimney, furnished by `interior=` house, pub, restaurant, shop, inn, office, plant, loft, school, hall), `cupola`, `shed`; `interiors.Room` and the room recipes (kitchen, parlour, bedroom, pub, restaurant, shop, office, fish_plant, loft, school, hall) and pieces (table, chair, dining, rug, ceiling_lamp). |
+| `lib/harbour.py`, `lib/landmarks.py` | Waterfront on piles (no water placed): `wharf`, `finger_pier`, `stage`, `flake`, `rock_pile`, `dory`, `longliner`, `slipway`. Landmarks and terraces: `lighthouse`, `church`, `graveyard`, `gazebo`, `flagpole`, `root_cellar`, `wall_cellar`, `retaining_wall`, `terrace_stairs`, `road`, `clothesline`, `boulder`, `power_line`, `awning`, `pot_stack`. |
 | `lib/build.py` | Loads `builds/<name>/build.py`, merges `edits/<name>.json`. |
 | `lib/world.py` | Places every build from `world/world.json` (position + facing) on the terrain; flags collisions. |
 | `builds/<name>/build.py` | One file per build (see template below). |
@@ -41,6 +43,9 @@ node viewer/tools/roundtrip.js <name> <x> <y> <z> <block>   # place via the view
 ```
 
 `studio.py build` exits non-zero when any check is an error. Read `out/<name>/report.md`.
+A build over ~9,000 commands is exported as `build_1`, `build_2`, … (Bedrock runs at most 10,000 commands
+per call); `build` then just lists the parts. The replay runs exactly those parts. Big builds take minutes
+to screenshot in headless software WebGL; run `shoot` in the background.
 
 ## Conventions
 
@@ -57,8 +62,14 @@ node viewer/tools/roundtrip.js <name> <x> <y> <z> <block>   # place via the view
 - **Steps**: one function per step; every cell belongs to exactly one step. Site prep is always step 01
   (`step01_site`), so build step N is function `stepNN` with NN = N + 1, matching the viewer's numbering. Supports must be in the same
   or an earlier step. Within a step the exporter places solids → partial blocks → attachments → water.
-- **Keep-zones**: `dict(box=(x1, z1, x2, z2), what="water"|"keep", depth=2, note=...)`. Site prep skips
-  them and the build may not place anything inside them. Water keep-zones also show as water in the viewer.
+- **Keep-zones**: `dict(box=(x1, z1, x2, z2), what="water"|"keep", depth=2, surface=-1, build_ok=False, note=...)`.
+  Site prep skips them. Normally the build may not place anything inside; `build_ok=True` makes a waterfront
+  zone the build may stand piers and decks in (still never cleared or filled; nothing becomes water).
+  Water keep-zones show as water at `surface` in the viewer. Blocks tagged `afloat` (boats) are exempt from
+  the floating check.
+- **Terraces**: `GRADES = [dict(box=(x1, z1, x2, z2), y=3, name=...)]` raises the ground (feet level `y`)
+  over a box; site prep clears above and fills below each terrace's own grade. Use `retaining_wall` +
+  `terrace_stairs` at the terrace edges. `TEST_STRIP = (x, z)` moves the test_blocks strip off the site.
 - **Areas**: `dict(key, title, box=(x1, z1, x2, z2), desc, ring=False)`; must not overlap (`ring=True`
   covers only the edge cells, e.g. a perimeter fence). They drive the plan map, info cards and labels.
 - Adding a block: add it in `blocks/palette.py` (reuse a shape), run `python3 studio.py palette`;

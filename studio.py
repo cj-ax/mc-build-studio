@@ -80,7 +80,7 @@ def compile_build(name, quiet=False):
         counts=cnt, checks=checks, edits=b.edit_log, book=b.book, grades=b.grades,
         height=max([y for (_, y, _), c in b.model.cells.items() if c.key != "air"] + [0]) + 1, pack_version=".".join(map(str, ver)),
         mcpack=str(mcpack.relative_to(ROOT)), world=world_entry,
-        commands={f: dict(files=sets[f][0], run_order=sets[f][1]["run_order"],
+        commands={f: dict(files=sets[f][0], run_order=sets[f][1]["run_order"], build_parts=sets[f][1]["build_parts"],
                           total=sets[f][1]["total"]) for f in FACINGS},
         install=install_steps(config()), config=config(), built=time.strftime("%Y-%m-%d %H:%M:%S"),
     )

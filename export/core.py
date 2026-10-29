@@ -266,7 +266,7 @@ def commands_for(b, facing):
     files["setup"] = [f"# {b.title} ({facing}): keep the whole site loaded. Wait ~5 s before building.",
                       *[f"tickingarea add {p3(a[0], -8, a[1])} {p3(a[2], clear_top, a[3])} {name} true"
                         for name, a in tick],
-                      f"say {b.title}: site loaded ({len(tick)} ticking area). Next: /function {ns}/{facing}/build"]
+                      "SETUP_NEXT"]
 
     prep = [f"# Step 1: Clear and level the land - clear above grade, fill holes below grade "
             "(terraces raised to their own grade). Keep-zones untouched."]
@@ -313,13 +313,30 @@ def commands_for(b, facing):
 
     run_order = ["step01_site"] + step_files + ["entities"]
     total = sum(len(files[f]) for f in run_order)
-    if total + len(run_order) < FUNC_MAX:
-        files["build"] = [f"# Runs every step (site work first) and the entities ({total} commands)."] + \
-                         [f"function {ns}/{facing}/{f}" for f in run_order] + \
-                         [f"say {b.title} built. Run /function {ns}/{facing}/cleanup when done."]
-    else:
-        files["build"] = [f"# Too many commands ({total}) for one call; run these in order:"] + \
-                         [f"say /function {ns}/{facing}/{f}" for f in run_order]
+    # one call may run at most ~10,000 commands (functionCommandLimit): group the steps into
+    # build (if it all fits) or build_1, build_2, ... each under FUNC_MAX
+    groups, cur, n = [], [], 0
+    for f in run_order:
+        k = len(files[f]) + 1
+        if cur and n + k + 2 > FUNC_MAX:
+            groups.append(cur)
+            cur, n = [], 0
+        cur.append(f)
+        n += k
+    if cur:
+        groups.append(cur)
+    build_parts = ["build"] if len(groups) == 1 else [f"build_{i + 1}" for i in range(len(groups))]
+    for i, (name, g) in enumerate(zip(build_parts, groups)):
+        cmds = sum(len(files[f]) for f in g)
+        nxt = (f"Next: /function {ns}/{facing}/{build_parts[i + 1]}" if i + 1 < len(groups)
+               else f"Done. Run /function {ns}/{facing}/cleanup when you're happy.")
+        files[name] = [f"# Part {i + 1} of {len(groups)}: {', '.join(g)} ({cmds} commands)."] + \
+                      [f"function {ns}/{facing}/{f}" for f in g] + [f"say {b.title}: part {i + 1}/{len(groups)} built. {nxt}"]
+    areas = f"{len(tick)} ticking area{'s' if len(tick) > 1 else ''}"
+    files["setup"][-1] = f"say {b.title}: site loaded ({areas}). Next: /function {ns}/{facing}/{build_parts[0]}"
+    if len(groups) > 1:
+        files["build"] = [f"# {total} commands is more than one call can run; run the parts in order:"] + \
+                         [f"say /function {ns}/{facing}/{p}" for p in build_parts]
 
     files["test_blocks"] = ["# One of every block variant this build uses, in a strip in front of the marker."] + strip_lines
     placed_cells = []
@@ -333,7 +350,7 @@ def commands_for(b, facing):
         f"kill @e[type=item,x=~{load[0]},y=~-8,z=~{load[1]},dx={load[2] - load[0] + 1},dy={clear_top + 9},dz={load[3] - load[1] + 1}]",
         *[f"tickingarea remove {name}" for name, _ in tick],
     ]
-    meta = dict(run_order=run_order, step_files=step_files, total=total, tick=tick,
+    meta = dict(run_order=run_order, step_files=step_files, total=total, tick=tick, build_parts=build_parts,
                 clear_top=clear_top, site=site, strip=strip_rect, load=load)
     return files, meta, world, derived, bstr
 
