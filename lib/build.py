@@ -25,6 +25,7 @@ class Build:
     keep_zones: list
     areas: list
     model: Model
+    book: dict = field(default_factory=dict)       # viewer presentation: subtitle, subject, stats, levels, secrets
     edit_log: dict = field(default_factory=dict)
     problems: list = field(default_factory=list)
 
@@ -100,6 +101,16 @@ def load(name, with_edits=True):
         keep_zones=norm_keep(getattr(mod, "KEEP_ZONES", [])),
         areas=norm_areas(getattr(mod, "AREAS", [])),
         model=m,
+        book=dict(
+            subtitle=getattr(mod, "SUBTITLE", ""),
+            subject=getattr(mod, "SUBJECT", "Areas"),
+            stats=[list(x) for x in getattr(mod, "STATS", [])],
+            levels=[list(x) for x in getattr(mod, "LEVELS", [])],
+            secrets=[dict(x) for x in getattr(mod, "SECRETS", [])],
+            steps_headline=getattr(mod, "STEPS_HEADLINE", ""),
+            steps_intro=getattr(mod, "STEPS_INTRO", ""),
+            views=[dict(x) for x in getattr(mod, "VIEWS", [])],
+        ),
     )
     if with_edits:
         b.edit_log = apply_edits(b, read_edits(name))

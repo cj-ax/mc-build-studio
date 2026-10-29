@@ -1,0 +1,2 @@
+Michroma (Vernon Adams), Inter (Rasmus Andersson), IBM Plex Mono (IBM) - all under the
+SIL Open Font License 1.1 (https://openfontlicense.org). Latin subsets from Google Fonts.

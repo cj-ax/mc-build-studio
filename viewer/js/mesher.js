@@ -9,7 +9,7 @@
   // faces: 0 +x east, 1 -x west, 2 +y up, 3 -y down, 4 +z south, 5 -z north
   const FN = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   const FACE_DIR = ["east", "west", "up", "down", "south", "north"];
-  const SHADE = [0.6, 0.6, 1.0, 0.5, 0.8, 0.8];
+  const UP = [0, 1, 0];
   MC.DIRV = DIRV; MC.LEFT = LEFT; MC.OPP = OPP; MC.FACE_DIR = FACE_DIR;
 
   // ---------------------------------------------------------------- palette / variants
@@ -138,11 +138,12 @@
 
   // ---------------------------------------------------------------- geometry buffers
   class Buf {
-    constructor() { this.pos = []; this.uv = []; this.light = []; this.hl = []; this.idx = []; this.n = 0; }
-    quad(P, UV, LT, hl, flip) {
+    constructor() { this.pos = []; this.nrm = []; this.uv = []; this.light = []; this.hl = []; this.idx = []; this.n = 0; }
+    quad(P, UV, LT, hl, flip, N) {
       const b = this.n;
       for (let k = 0; k < 4; k++) {
         this.pos.push(P[k][0], P[k][1], P[k][2]);
+        this.nrm.push(N[0], N[1], N[2]);
         this.uv.push(UV[k][0], UV[k][1]);
         this.light.push(LT[k][0], LT[k][1], LT[k][2]);
         this.hl.push(hl);
@@ -154,6 +155,7 @@
     geometry() {
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(this.pos, 3));
+      g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nrm, 3));
       g.setAttribute("uv", new THREE.Float32BufferAttribute(this.uv, 2));
       g.setAttribute("light", new THREE.Float32BufferAttribute(this.light, 3));
       g.setAttribute("hl", new THREE.Float32BufferAttribute(this.hl, 1));
@@ -243,10 +245,10 @@
         for (const c of [c0, c1, c2, corner]) if (!c[2]) { ss += c[0]; bb += c[1]; cnt++; }
         const ao = c1[2] && c2[2] ? 0 : 3 - ((c1[2] ? 1 : 0) + (c2[2] ? 1 : 0) + (corner[2] ? 1 : 0));
         aos.push(ao);
-        LT.push([cnt ? ss / cnt / 15 : 0, cnt ? bb / cnt / 15 : 0, SHADE[f] * [0.5, 0.65, 0.82, 1][ao]]);
+        LT.push([cnt ? ss / cnt / 15 : 0, cnt ? bb / cnt / 15 : 0, [0.42, 0.6, 0.8, 1][ao]]);
       }
       const UV = verts.map((v) => tileUV(tile, faceST(f, v)));
-      buf.quad(verts.map((v) => [v[0] + x, v[1] + y, v[2] + z]), UV, LT, hl, aos[0] + aos[2] < aos[1] + aos[3]);
+      buf.quad(verts.map((v) => [v[0] + x, v[1] + y, v[2] + z]), UV, LT, hl, aos[0] + aos[2] < aos[1] + aos[3], FN[f]);
     }
 
     // partial box (coords 0..16), flat light; faces on the cell edge cull against opaque neighbours
@@ -265,18 +267,18 @@
           l = [Math.max(nl[0], ownL[0]), Math.max(nl[1], ownL[1])];
         }
         const verts = faceVerts(f, b);
-        const LT = [l[0] / 15, l[1] / 15, SHADE[f]];
+        const LT = [l[0] / 15, l[1] / 15, 1];
         const UV = verts.map((v) => tileUV(tiles[f], faceST(f, v)));
-        buf.quad(verts.map((v) => [v[0] + x, v[1] + y, v[2] + z]), UV, [LT, LT, LT, LT], hl);
+        buf.quad(verts.map((v) => [v[0] + x, v[1] + y, v[2] + z]), UV, [LT, LT, LT, LT], hl, false, FN[f]);
       }
     }
     function plane(buf, x, y, z, P, tile, l, hl) {   // double-sided quad, P in 0..16 coords, uv full tile
       const pts = P.map((p) => [x + p[0] / 16, y + p[1] / 16, z + p[2] / 16]);
       const st = [[0, 1], [1, 1], [1, 0], [0, 0]];
       const UV = st.map((s) => tileUV(tile, s));
-      const LT = [l[0] / 15, l[1] / 15, 0.9];
-      buf.quad(pts, UV, [LT, LT, LT, LT], hl);
-      buf.quad([pts[1], pts[0], pts[3], pts[2]], [UV[1], UV[0], UV[3], UV[2]], [LT, LT, LT, LT], hl);
+      const LT = [l[0] / 15, l[1] / 15, 0.92];
+      buf.quad(pts, UV, [LT, LT, LT, LT], hl, false, UP);
+      buf.quad([pts[1], pts[0], pts[3], pts[2]], [UV[1], UV[0], UV[3], UV[2]], [LT, LT, LT, LT], hl, false, UP);
     }
     function rotBox(bx, facing) {   // rotate a box defined for facing north around the cell centre
       let [x0, y0, z0, x1, y1, z1] = bx;
@@ -451,7 +453,7 @@
           const LT = [ol[0] / 15, ol[1] / 15, 1];
           const pts = [[x, y + 0.02, z + 1], [x + 1, y + 0.02, z + 1], [x + 1, y + 0.02, z], [x, y + 0.02, z]];
           const UV = [[0, 1], [1, 1], [1, 0], [0, 0]].map((s) => tileUV(T[2], s));
-          solid.quad(pts, UV, [LT, LT, LT, LT], hl);
+          solid.quad(pts, UV, [LT, LT, LT, LT], hl, false, UP);
           break;
         }
         case "water": {
@@ -464,9 +466,9 @@
             if (f === 2 && topH === 1) continue;
             const verts = faceVerts(f, [0, 0, 0, 1, topH, 1]);
             const l = L(x + n[0], y + n[1], z + n[2]);
-            const ll = [Math.max(l[0], ol[0]) / 15, Math.max(l[1], ol[1]) / 15, SHADE[f]];
+            const ll = [Math.max(l[0], ol[0]) / 15, Math.max(l[1], ol[1]) / 15, 1];
             const UV = verts.map((vv) => tileUV(T[f], faceST(f, vv)));
-            water.quad(verts.map((vv) => [vv[0] + x, vv[1] + y, vv[2] + z]), UV, [ll, ll, ll, ll], hl);
+            water.quad(verts.map((vv) => [vv[0] + x, vv[1] + y, vv[2] + z]), UV, [ll, ll, ll, ll], hl, false, FN[f]);
           }
           break;
         }

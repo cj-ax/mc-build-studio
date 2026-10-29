@@ -441,7 +441,7 @@
         this.texture.magFilter = THREE.NearestFilter;
         this.texture.minFilter = THREE.NearestFilter;
         this.texture.generateMipmaps = false;
-        this.texture.colorSpace = THREE.NoColorSpace;
+        this.texture.colorSpace = THREE.SRGBColorSpace;
         this.texture.flipY = false;
       }
       return this.texture;

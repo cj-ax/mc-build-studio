@@ -24,6 +24,8 @@ sys.path.insert(0, str(ROOT))
 
 from lib import build as B  # noqa: E402
 
+mimetypes.add_type("font/woff2", ".woff2")
+
 clients = []
 clients_lock = threading.Lock()
 rebuild_lock = threading.Lock()

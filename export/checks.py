@@ -129,7 +129,12 @@ def run_checks(b):
 
     while q:
         p = q.popleft()
+        cp = cells.get(p)
         for n in links(p):
+            # plants, crops, carpets, torches, lanterns, doors... cannot hold up a block above them
+            if cp is not None and n == (p[0], p[1] + 1, p[2]) and cp.flags.get("walk") and \
+                    not (cp.group is not None and cells.get(n) is not None and cells[n].group == cp.group):
+                continue
             if n in cells and n not in grounded and cells[n].key != "water":
                 grounded.add(n)
                 q.append(n)
@@ -332,7 +337,7 @@ def counts(b):
     cells = {p: c for p, c in b.model.cells.items() if c.key != "air"}
     hidden = []
     for p, c in cells.items():
-        if p[1] >= 0:
+        if p[1] >= 0 or not c.flags.get("opaque"):   # only buried full blocks count as fill
             continue
         x, y, z = p
         exposed = False

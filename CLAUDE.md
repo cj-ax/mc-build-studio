@@ -18,11 +18,11 @@ PS5 through a Realm; packs are imported on a phone or PC (`config.json` → `pla
 | `builds/<name>/build.py` | One file per build (see template below). |
 | `world/world.json` | Terrain (`grade` = Y of the grass layer, `sea_level`, `bounds`, `water` areas) and each build's `pos` [x, z] of its marker and `facing`. |
 | `edits/<name>.json` | Blocks placed/removed by hand in the viewer; merged on top of the generated model and included in counts, checks and the pack. |
-| `export/core.py` | Commands per facing: site prep, steps, entities, setup (ticking area), test_blocks, cleanup, build wrapper. Greedy box merging, `/fill` ≤ 32,768, functions ≤ 9,000 lines, derived states (stair corners, fence/pane/wall connections). |
+| `export/core.py` | Commands per facing: `step01_site` (site prep), `step02_<key>`… (one per build step, split `_a/_b` when long), entities, setup (ticking area), test_blocks, cleanup, build wrapper. Greedy box merging, `/fill` ≤ 32,768, functions ≤ 9,000 lines, derived states (stair corners, fence/pane/wall connections). |
 | `export/sim.py` | Replays the `.mcfunction` files into a simulated world. |
 | `export/checks.py` | Game-rule checks, block counts, replay comparison in all four facings. |
 | `export/pack.py`, `export/plan.py` | `.mcpack` writer (stable UUIDs, version bumps only when content changes, `export/versions.json`), plan maps and pack icon. |
-| `viewer/` | `index.html` + `js/` (three.js r158 in `vendor/`), `server.py` (dev server, live reload, saves edits), `static.py` (single-file HTML), `tools/shoot.js` (headless screenshots), `tools/roundtrip.js` (edit round-trip test). |
+| `viewer/` | "Build book" viewer: `index.html` + `js/` (three.js r158 and the Michroma / Inter / IBM Plex Mono fonts in `vendor/`), `server.py` (dev server, live reload, saves edits), `static.py` (single-file HTML, fonts inlined), `tools/shoot.js` (headless screenshots), `tools/roundtrip.js` (edit round-trip test). Lighting: shadowing sun, sky environment light, haze, ACES tone mapping, baked voxel sky/block light and AO. |
 | `out/<name>/` | Generated: `model.json` (viewer data), `report.md`, `plan_areas.png`, `plan_top.png`, `pack/`, `<name>.mcpack`, `<name>.html`, `shots/`. `out/world.json`, `out/world_plan.png`. |
 
 ## Commands
@@ -36,7 +36,7 @@ python3 studio.py build --all
 python3 studio.py world            # out/world.json + out/world_plan.png (build collisions)
 python3 studio.py serve            # viewer at http://localhost:8765, rebuilds + reloads on change
 python3 studio.py html <name>      # out/<name>/<name>.html, self-contained, opens from disk
-python3 studio.py shoot <name> [views]   # out/<name>/shots/*.png (overview front back top night sunset world area:<key> ...)
+python3 studio.py shoot <name> [views]   # out/<name>/shots/*.png (ui approach aerial front back plan night sunset world area:<key>)
 node viewer/tools/roundtrip.js <name> <x> <y> <z> <block>   # place via the viewer, verify edits → rebuild → pack
 ```
 
@@ -54,7 +54,8 @@ node viewer/tools/roundtrip.js <name> <x> <y> <z> <block>   # place via the view
 - **Props** are model-level and rotate with the build: `facing` (direction of ascent for stairs, the way
   you walk through a door/gate, the way a ladder/torch points away from its wall, the way a chest/furnace
   front looks), `half`, `axis`, `open`, `hinge`, `hanging`, `upper`, `head`, `age`.
-- **Steps**: one function per step; every cell belongs to exactly one step. Supports must be in the same
+- **Steps**: one function per step; every cell belongs to exactly one step. Site prep is always step 01
+  (`step01_site`), so build step N is function `stepNN` with NN = N + 1, matching the viewer's numbering. Supports must be in the same
   or an earlier step. Within a step the exporter places solids → partial blocks → attachments → water.
 - **Keep-zones**: `dict(box=(x1, z1, x2, z2), what="water"|"keep", depth=2, note=...)`. Site prep skips
   them and the build may not place anything inside them. Water keep-zones also show as water in the viewer.
@@ -76,6 +77,13 @@ TARGET_BLOCKS = 2500
 STEPS = [("foundation", "Foundation", "..."), ("walls", "Walls", "..."), ("roof", "Roof", "...")]
 KEEP_ZONES = [dict(box=(20, 0, 29, 9), what="water", depth=3, note="existing bay")]
 AREAS = [dict(key="inn", title="Inn", box=(2, 10, 18, 22), desc="...")]
+# viewer presentation (all optional)
+SUBTITLE = "Harbour inn and fish market · Minecraft Bedrock build book"   # header line under the title
+SUBJECT = "Harbour"              # name of the areas tab and of the Faces control ("Harbour faces")
+STATS = [("12", "rooms")]        # extra header stat tiles (default: number of steps)
+LEVELS = [("Lamp", 22), ("Ground", 0), ("Water", -2)]   # named stops on the Cut slider (y shown up to)
+SECRETS = [dict(title="Smugglers' cellar", pos=(5, -3, 12), desc="...")]   # Secrets tab, Focus = x-ray + cut
+STEPS_HEADLINE = "Eight steps, grass to gazebo"   # Steps tab heading (default generated)
 
 def build(m):
     with m.step("foundation"):
@@ -107,8 +115,8 @@ def build(m):
    replays the export for all four facings into a messy simulated site (trees, holes, water) and compares
    against the model, confirms keep-zones are unchanged, every door/bed/entity marker lands in clear space,
    `/fill` volumes, function lengths and ticking areas. Fix every error; justify any warning.
-6. **Screenshot and review**: `python3 studio.py shoot <name>` (overview, front, back, top, night, sunset,
-   world, each area). Open the images, look for anything wrong (floating bits, wrong stair direction, gaps,
+6. **Screenshot and review**: `python3 studio.py shoot <name>` (full UI, approach, aerial, front, back, plan,
+   night, sunset, world, each area). Open the images, look for anything wrong (floating bits, wrong stair direction, gaps,
    dark interiors with no light, missing ladders, odd textures) and fix it. Re-shoot after fixes.
 7. **Report and deliver**: give per-step and total block counts against the target (from
    `out/<name>/report.md`), then deliver `out/<name>/<name>.mcpack` (and `<name>.html` if they want to

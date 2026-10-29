@@ -119,8 +119,8 @@ def how_to_text(b, sets, cfg):
               "(or use execute positioned X Y Z run ...):",
               f"   1. /function {ns}/<facing>/setup        (loads the site; wait ~5 seconds)",
               f"   2. /function {ns}/<facing>/test_blocks  (optional: one of every block, in front of you)",
-              f"   3. /function {ns}/<facing>/build        (prep + every step + entities)",
-              f"      or one step at a time: /function {ns}/<facing>/prep, then step1_..., step2_..., entities",
+              f"   3. /function {ns}/<facing>/build        (every step + entities)",
+              f"      or one step at a time: step01_site, step02_..., step03_..., then entities",
               f"   4. /function {ns}/<facing>/cleanup      (test strip, dropped items, ticking area)", ""]
     f0 = FACINGS[0]
     files, meta = sets[f0]

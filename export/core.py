@@ -260,7 +260,7 @@ def commands_for(b, facing):
                         for name, a in tick],
                       f"say {b.title}: site loaded ({len(tick)} ticking area). Next: /function {ns}/{facing}/build"]
 
-    prep = [f"# Site prep: clear above grade, fill holes below grade. Keep-zones untouched."]
+    prep = [f"# Step 1: Clear and level the land - clear above grade, fill holes below grade. Keep-zones untouched."]
     for (x1, z1, x2, z2) in site_rects(b, facing):
         for bx in split_volume(x1, 0, z1, x2, clear_top, z2):
             prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:air")
@@ -270,14 +270,14 @@ def commands_for(b, facing):
         for bx in split_volume(x1, -1, z1, x2, -1, z2):
             for src in ("minecraft:air", "minecraft:water", "minecraft:flowing_water"):
                 prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:grass_block replace {src}")
-    files["prep"] = prep
+    files["step01_site"] = prep
 
     step_files = []
     for si, s in enumerate(b.steps, 1):
-        lines = [f"# Step {si}: {s['title']}" + (f" - {s['desc']}" if s["desc"] else "")]
+        lines = [f"# Step {si + 1}: {s['title']}" + (f" - {s['desc']}" if s["desc"] else "")]
         cells = {p: c for p, c in world.items() if c["step"] == s["key"]}
         lines += step_commands(cells, bstr)
-        base = f"step{si}_{s['key']}"
+        base = f"step{si + 1:02d}_{s['key']}"
         chunks = [lines[i:i + FUNC_MAX] for i in range(0, len(lines), FUNC_MAX)] or [lines]
         if len(chunks) == 1:
             files[base] = lines
@@ -300,10 +300,10 @@ def commands_for(b, facing):
             ent.append(f"execute align xyz run summon {mk['id']} ~{x + 0.5:g} ~{y} ~{z + 0.5:g}")
     files["entities"] = ent
 
-    run_order = ["prep"] + step_files + ["entities"]
+    run_order = ["step01_site"] + step_files + ["entities"]
     total = sum(len(files[f]) for f in run_order)
     if total + len(run_order) < FUNC_MAX:
-        files["build"] = [f"# Runs prep, every step and the entities ({total} commands)."] + \
+        files["build"] = [f"# Runs every step (site work first) and the entities ({total} commands)."] + \
                          [f"function {ns}/{facing}/{f}" for f in run_order] + \
                          [f"say {b.title} built. Run /function {ns}/{facing}/cleanup when done."]
     else:

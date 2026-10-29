@@ -15,6 +15,14 @@ STEPS = [
     ("garden", "Garden", "Fence and gate, path, vegetable beds, flowers, trees, back yard"),
     ("lighting", "Lighting & life", "Lanterns, door torches, lamp posts, the cat"),
 ]
+SUBTITLE = "Two-storey timber cottage with a kitchen garden · Minecraft Bedrock build book · fenced, no combat"
+SUBJECT = "Cottage"
+STEPS_HEADLINE = "Seven steps, grass to lanterns"
+LEVELS = [("Loft", 6), ("Kitchen", 2), ("Ground", 0), ("Pond", -1)]
+SECRETS = [
+    dict(title="Under the hay", pos=(8, -1, 20),
+         desc="A chest is buried under the corner hay bales in the back yard. Break the bottom bale to find it."),
+]
 KEEP_ZONES = [
     dict(box=(19, 17, 23, 21), what="water", depth=2, note="existing pond"),
 ]
@@ -101,6 +109,7 @@ def build(m):
         m.put(8, 0, 20, "hay_block")
         m.put(9, 0, 20, "hay_block", axis="x")
         m.put(8, 1, 20, "hay_block")
+        m.put(8, -1, 20, "chest", facing="north")     # secret stash under the hay
         m.put(10, 0, 20, "composter")
         m.put(11, 0, 20, "barrel", facing="up")
         m.put(12, 0, 21, "pumpkin", facing="north")

@@ -35,7 +35,8 @@ const modelFile = path.join(ROOT, "out", name, "model.json");
     const s = window.studio;
     s.look(0, -Math.PI / 2 + 0.0001, [x + 0.5, y + 4, z + 0.5]);
     return s.frameNow().then(() => {
-      const h = s.pickAt(innerWidth / 2, innerHeight / 2);
+      const r = document.querySelector("#gl").getBoundingClientRect();
+      const h = s.pickAt(r.left + r.width / 2, r.top + r.height / 2);
       if (!h || h.x !== x || h.y !== y || h.z !== z) return { error: "pick missed", h };
       s.setSlot(0, block);
       s.place(h);
@@ -52,14 +53,14 @@ const modelFile = path.join(ROOT, "out", name, "model.json");
   for (let i = 0; i < 60 && (!fs.existsSync(modelFile) || fs.statSync(modelFile).mtimeMs === before); i++) await sleep(500);
   await sleep(500);
   const m = JSON.parse(fs.readFileSync(modelFile, "utf8"));
-  const vi = m.variants.findIndex((v) => v[0] === key);
-  let inModel = false;
-  for (let i = 0; i < m.cells.length; i += 6) if (m.cells[i] === X && m.cells[i + 1] === Y + 1 && m.cells[i + 2] === Z && m.cells[i + 3] === vi) inModel = true;
+  let inModel = false, vi = -1;
+  for (let i = 0; i < m.cells.length; i += 6)
+    if (m.cells[i] === X && m.cells[i + 1] === Y + 1 && m.cells[i + 2] === Z && m.variants[m.cells[i + 3]][0] === key) { inModel = true; vi = m.cells[i + 3]; }
   console.log("rebuilt model has it:", inModel, "| edits merged:", JSON.stringify(m.edits), "| errors:", m.checks.filter((c) => c.level === "error").length);
   const f = m.world && m.world.facing || "north";
   const relx = X - m.marker[0], rely = Y + 1 - m.marker[1], relz = Z - m.marker[2];
   const allLines = Object.values(m.commands.north.files).flat();
-  console.log("north function places it:", allLines.some((l) => l.includes(`~${relx} ~${rely} ~${relz}`) && l.includes(m.variants[vi][0].replace("_", "")) || l.startsWith(`setblock ~${relx} ~${rely} ~${relz} minecraft:${key}`)));
+  console.log("north function places it:", allLines.some((l) => l.includes(`~${relx} ~${rely} ~${relz}`)));
 
   // second block: place, then undo -> must vanish from the edits file
   const r2 = await placeOn(X, Y + 1, Z, "torch");

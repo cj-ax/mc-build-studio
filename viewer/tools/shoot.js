@@ -12,7 +12,8 @@ const name = process.argv[2];
 if (!name) { console.error("usage: node viewer/tools/shoot.js <build> [views...]"); process.exit(2); }
 const model = JSON.parse(fs.readFileSync(path.join(ROOT, "out", name, "model.json"), "utf8"));
 let views = process.argv.slice(3);
-if (!views.length) views = ["overview", "front", "back", "top", "night", "sunset", "world", ...model.areas.filter((a) => !a.ring).map((a) => "area:" + a.key)];
+if (!views.length) views = ["ui", "approach", "aerial", "front", "back", "plan", "night", "sunset", "world",
+  ...model.areas.filter((a) => !a.ring).map((a) => "area:" + a.key)];
 const outDir = path.join(ROOT, "out", name, "shots");
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -44,15 +45,18 @@ function up(url) {
     if (v === "world") {
       await open(`mode=world&ui=0`);
       await page.evaluate((n) => window.studio.viewPreset("build:" + n), name);
+    } else if (v === "ui") {
+      await open(`build=${name}&mode=build`);
+      await page.evaluate(() => { window.studio.setTime("day"); window.studio.viewPreset("aerial"); });
     } else {
-      if (page.url().includes("mode=world")) await open(`build=${name}&mode=build&ui=0`);
+      if (!page.url().includes("ui=0") || page.url().includes("mode=world")) await open(`build=${name}&mode=build&ui=0`);
       await page.evaluate((v) => {
         const s = window.studio;
         s.setTime(v === "night" ? "night" : v === "sunset" ? "sunset" : "day");
-        s.viewPreset(v === "night" || v === "sunset" ? "overview" : v);
+        s.viewPreset(v === "night" || v === "sunset" ? "aerial" : v);
       }, v);
     }
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(700);
     const file = path.join(outDir, v.replace(":", "_") + ".png");
     await page.screenshot({ path: file });
     console.log("shot", path.relative(ROOT, file));
