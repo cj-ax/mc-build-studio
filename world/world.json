@@ -1,0 +1,14 @@
+{
+  "terrain": {
+    "grade": 64,
+    "sea_level": 62,
+    "bounds": [-64, -64, 63, 63],
+    "decor": 0.05,
+    "water": [
+      {"name": "lake", "rect": [24, -56, 58, -24], "surface": 62, "depth": 4}
+    ]
+  },
+  "builds": [
+    {"name": "cottage", "pos": [-14, -14], "facing": "north"}
+  ]
+}

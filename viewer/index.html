@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Studio</title>
+<style>
+:root {
+  --bg: #1c1f24; --panel: rgba(24, 27, 32, 0.94); --line: #3a3f47; --text: #e8e6e1; --dim: #9aa0a8;
+  --accent: #e6b93c; --ok: #6fcf6f; --warn: #e6b93c; --err: #ff6b6b; --btn: #2d323a; --btn-on: #4a6b2f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  font: 13px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+button, select, input { font: inherit; color: var(--text); }
+button { background: var(--btn); border: 1px solid var(--line); border-radius: 4px; padding: 4px 9px; cursor: pointer; }
+button:hover { border-color: #6a7280; }
+button.on { background: var(--btn-on); border-color: #7fa653; }
+select, input[type=text], input[type=number] { background: #111317; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; }
+#top { position: fixed; left: 8px; right: 8px; top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  pointer-events: none; z-index: 5; }
+#top > * { pointer-events: auto; }
+.group { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 3px; }
+.group button { border: none; background: transparent; }
+.group button.on { background: var(--btn-on); }
+#title { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font-weight: 600; }
+#title small { color: var(--dim); font-weight: 400; margin-left: 6px; }
+#status { position: fixed; right: 8px; bottom: 8px; width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 4; }
+#status.live::before { content: "● "; color: var(--ok); }
+#side { position: fixed; right: 8px; top: 52px; bottom: 46px; width: 360px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; display: flex; flex-direction: column; z-index: 4; }
+#side.hidden { display: none; }
+#tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); }
+#tabs button { border: none; background: transparent; padding: 3px 7px; }
+#tabs button.on { background: var(--btn-on); }
+#pane { overflow: auto; padding: 10px; flex: 1; }
+#pane h3 { margin: 4px 0 8px; font-size: 14px; }
+#pane h4 { margin: 12px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+.card { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 8px; background: rgba(255,255,255,0.02); }
+.card.on { border-color: var(--accent); }
+.card .meta { color: var(--dim); font-size: 12px; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row.space { justify-content: space-between; flex-wrap: wrap; }
+table { width: 100%; border-collapse: collapse; }
+td, th { padding: 3px 4px; border-bottom: 1px solid #2c3036; text-align: left; vertical-align: middle; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.sw { width: 18px; height: 18px; image-rendering: pixelated; vertical-align: middle; border-radius: 2px; }
+pre { background: #0f1114; border: 1px solid var(--line); border-radius: 4px; padding: 6px; font-size: 11px; max-height: 260px;
+  overflow: auto; white-space: pre; }
+code { background: #0f1114; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.lvl-ok { color: var(--ok); } .lvl-warn { color: var(--warn); } .lvl-error { color: var(--err); }
+.steprow { cursor: pointer; } .steprow.on td { background: rgba(230,185,60,0.15); }
+#bottom { position: fixed; left: 8px; right: 376px; bottom: 8px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 12px; z-index: 4; display: grid; grid-template-columns: 70px 1fr 220px; gap: 4px 10px; align-items: center; }
+#bottom.wide { right: 8px; }
+#bottom input[type=range] { width: 100%; }
+#bottom .lab { color: var(--dim); }
+#readout { position: fixed; left: 8px; bottom: 90px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; z-index: 4; font-variant-numeric: tabular-nums; min-width: 220px; }
+#readout:empty { display: none; }
+#readout b { color: var(--accent); }
+#labels { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+.label { position: absolute; transform: translate(-50%, -100%); background: rgba(0,0,0,0.65); color: #fff; padding: 2px 6px;
+  border-radius: 3px; font-size: 12px; white-space: nowrap; border: 1px solid rgba(255,255,255,0.25); }
+.label.build { font-size: 14px; font-weight: 600; }
+#picker { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 92vw); max-height: 76vh;
+  background: #c6c6c6; color: #222; border: 3px solid #fff; border-right-color: #555; border-bottom-color: #555; border-radius: 2px;
+  z-index: 10; display: none; flex-direction: column; padding: 10px; }
+#picker.open { display: flex; }
+#picker .pk-head { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+#picker .pk-head button { background: #8b8b8b; color: #fff; border: 2px solid #fff; border-right-color: #373737; border-bottom-color: #373737; border-radius: 0; }
+#picker .pk-head button.on { background: #5a7d2e; }
+#picker input { background: #fff; color: #000; }
+#pk-grid { display: grid; grid-template-columns: repeat(auto-fill, 44px); gap: 2px; overflow: auto; padding: 2px; }
+.slot { width: 44px; height: 44px; background: #8b8b8b; border: 2px solid #373737; border-right-color: #fff; border-bottom-color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+.slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+.slot:hover { background: #a8a8a8; }
+.slot.sel { outline: 3px solid #fff; z-index: 1; }
+#pk-name { margin-top: 6px; min-height: 18px; font-weight: 600; }
+#hotbar { position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%); display: none; gap: 0; z-index: 5;
+  background: rgba(0,0,0,0.5); padding: 3px; border: 2px solid #555; }
+#hotbar.on { display: flex; }
+#hotbar .slot { width: 46px; height: 46px; }
+#hotbar .slot .num { position: absolute; left: 3px; top: 1px; font-size: 10px; color: #fff; text-shadow: 1px 1px #000; }
+#crosshair { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); z-index: 3; pointer-events: none; display: none; }
+#crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,0.8); }
+#crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; } #crosshair::after { top: 8px; left: 0; height: 2px; width: 18px; }
+#toast { position: fixed; left: 50%; top: 60px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent);
+  padding: 6px 14px; border-radius: 6px; z-index: 20; display: none; }
+#help { position: fixed; left: 8px; top: 52px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px;
+  z-index: 6; display: none; max-width: 360px; }
+#help.open { display: block; }
+#help kbd { background: #111; border: 1px solid #555; border-radius: 3px; padding: 0 5px; font-size: 11px; }
+#plan-canvas { width: 100%; image-rendering: pixelated; background: #111; border: 1px solid var(--line); border-radius: 4px; cursor: crosshair; }
+body.noui #top, body.noui #side, body.noui #bottom, body.noui #readout, body.noui #hotbar, body.noui #help { display: none !important; }
+@media (max-width: 760px) { #side { width: auto; left: 8px; top: auto; height: 40vh; bottom: 150px; } #bottom { right: 8px; bottom: 46px; grid-template-columns: 60px 1fr; }
+  #status { left: 8px; width: auto; } #readout { bottom: 150px; } }
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="labels"></div>
+<div id="crosshair"></div>
+<div id="top">
+  <div id="title">Build Studio</div>
+  <div class="group" id="modes">
+    <button data-mode="world">World</button><button data-mode="build">Build</button><button data-mode="edit">Edit</button>
+  </div>
+  <select id="build-select" title="Open a build"></select>
+  <div class="group" id="times">
+    <button data-time="day">Day</button><button data-time="sunset">Sunset</button><button data-time="night">Night</button>
+  </div>
+  <div class="group" id="tools">
+    <button id="t-frame" title="Frame the build (F)">Frame</button>
+    <button id="t-labels" title="Area labels (L)">Labels</button>
+    <button id="t-measure" title="Measure between two blocks (M)">Measure</button>
+    <button id="t-panel" title="Show/hide the side panel (P)">Panel</button>
+    <button id="t-help" title="Controls (H)">?</button>
+  </div>
+  <div id="status">loading…</div>
+</div>
+<div id="help">
+  <b>Camera</b><br>
+  Drag (left or right mouse) to look · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> up · <kbd>Shift</kbd> down ·
+  mouse wheel: speed · <kbd>F</kbd> frame build<br><br>
+  <b>World</b>: click a build to open it.<br>
+  <b>Build</b>: <kbd>[</kbd> <kbd>]</kbd> step · <kbd>,</kbd> <kbd>.</kbd> cut height · <kbd>M</kbd> measure · <kbd>L</kbd> labels<br>
+  <b>Edit</b>: left click break · right click place · middle click pick · <kbd>E</kbd> block picker · <kbd>1</kbd>-<kbd>9</kbd> hotbar ·
+  <kbd>R</kbd> rotate · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo<br><br>
+  Coordinates are relative to the marker block (where you stand to run the functions).
+</div>
+<div id="side">
+  <div id="tabs"></div>
+  <div id="pane"></div>
+</div>
+<div id="bottom">
+  <span class="lab">Step</span><input type="range" id="step" min="1" max="1" value="1"><span id="step-label"></span>
+  <span class="lab">Cut</span><input type="range" id="cut" min="0" max="1" value="1"><span id="cut-label"></span>
+  <span class="lab">Show</span>
+  <span class="row"><label><input type="checkbox" id="opt-hl" checked> highlight new</label>
+    <label><input type="checkbox" id="opt-ghost" checked> ghost later steps</label>
+    <label><input type="checkbox" id="opt-terrain" checked> ground</label></span>
+  <span></span>
+</div>
+<div id="readout"></div>
+<div id="hotbar"></div>
+<div id="picker">
+  <div class="pk-head"><b>Blocks</b><input type="text" id="pk-search" placeholder="search…"><span id="pk-cats"></span>
+    <span style="margin-left:auto">click: put in hotbar · E/Esc: close</span></div>
+  <div id="pk-grid"></div>
+  <div id="pk-name"></div>
+</div>
+<div id="toast"></div>
+<!--SCRIPTS-->
+<script src="vendor/three.min.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/app.js"></script>
+<!--/SCRIPTS-->
+</body>
+</html>

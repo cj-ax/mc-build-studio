@@ -1,0 +1,31 @@
+{
+ "build": "cottage",
+ "updated": "2026-10-29T18:33:34",
+ "put": [
+  {
+   "pos": [
+    0,
+    1,
+    0
+   ],
+   "block": "lantern",
+   "props": {
+    "hanging": false
+   },
+   "step": "lighting"
+  },
+  {
+   "pos": [
+    24,
+    1,
+    0
+   ],
+   "block": "lantern",
+   "props": {
+    "hanging": false
+   },
+   "step": "lighting"
+  }
+ ],
+ "remove": []
+}

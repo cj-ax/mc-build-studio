@@ -1,0 +1,14 @@
+{
+  "platform": "phone",
+  "phone_os": "ios",
+  "realm": true,
+  "author": "Minecraft Build Studio",
+  "pack_prefix": "Studio",
+  "port": 8765,
+  "_help": {
+    "platform": "Where you import .mcpack files: 'phone' or 'pc' (PS5 cannot import packs; it downloads them from the Realm).",
+    "phone_os": "'ios' or 'android' (used when platform is 'phone').",
+    "realm": "true: packs are applied to your Realm from the phone/PC. false: a local world.",
+    "port": "Dev server port for `python3 studio.py serve`."
+  }
+}
