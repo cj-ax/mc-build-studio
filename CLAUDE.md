@@ -112,7 +112,9 @@ def build(m):
    dark interiors with no light, missing ladders, odd textures) and fix it. Re-shoot after fixes.
 7. **Report and deliver**: give per-step and total block counts against the target (from
    `out/<name>/report.md`), then deliver `out/<name>/<name>.mcpack` (and `<name>.html` if they want to
-   share a preview), with the in-game commands for the chosen facing.
+   share a preview), with the in-game commands for the chosen facing. Then commit and push to `main`
+   on https://github.com/cj-ax/mc-build-studio (`out/` is git-ignored; `export/versions.json` and
+   `edits/` are committed).
 
 Edits: when the user edits in the viewer, the dev server saves `edits/<name>.json` and rebuilds. Treat
 edits as part of the build: they go through every check; mention any errors they introduce.
