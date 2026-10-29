@@ -87,9 +87,30 @@ def run_file(world, files, name, origin, depth=0, require_loaded=True):
             world.errors.append(f"{name}:{ln}: {e} :: {line}")
 
 
+def tokens(line):
+    """Split on spaces, keeping "quoted strings" and [block states] as single tokens."""
+    out, cur, quote, depth = [], "", False, 0
+    for ch in line:
+        if ch == '"':
+            quote = not quote
+        elif not quote and ch == "[":
+            depth += 1
+        elif not quote and ch == "]":
+            depth -= 1
+        if ch == " " and not quote and depth == 0:
+            if cur:
+                out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return out
+
+
 def run_line(world, files, line, origin, depth, require_loaded):
     world.commands += 1
-    t = line.split()
+    t = tokens(line)
     ox, oy, oz = origin
     cmd = t[0]
     if cmd == "fill":
@@ -138,7 +159,7 @@ def run_line(world, files, line, origin, depth, require_loaded):
         if t[1:4] != ["align", "xyz", "run"]:
             raise SimError("unsupported execute form")
         aligned = tuple(math.floor(c) for c in origin)
-        run_line(world, files, " ".join(t[4:]), aligned, depth, require_loaded)
+        run_line(world, files, line.split(" run ", 1)[1], aligned, depth, require_loaded)
         world.commands -= 1
     elif cmd == "summon":
         rest = t[2:]

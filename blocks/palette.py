@@ -308,6 +308,69 @@ add("iron_block", "iron_block", name="Iron Block", cat="utility", color="#d8d8d8
 add("gold_block", "gold_block", name="Gold Block", cat="utility", color="#f5d84a", tex={"all": ["metal", "#f5d84a"]})
 add("beacon", "beacon", "glass", "Beacon", "light", "#7ae0e0", {"all": ["glow", "#9af0e8"]}, light=15)
 
+# ---------------------------------------------------------------- outport: clapboard colours, glass, furniture
+CONCRETE = {"red": "#8e2121", "orange": "#e06101", "yellow": "#f1af15", "lime": "#5ea918", "green": "#495b24",
+            "cyan": "#157788", "light_blue": "#2489c7", "blue": "#2c2e8f", "purple": "#64209c", "magenta": "#a9309f",
+            "pink": "#d5658e", "black": "#080a0f", "brown": "#603c20", "light_gray": "#7d7d73"}
+for col, hexc in CONCRETE.items():
+    add(f"{col}_concrete", f"{col}_concrete", name=f"{col.replace('_', ' ').title()} Concrete", color=hexc,
+        tex={"all": ["clapboard", hexc]})
+for col, hexc in [("red", "#8f3d2e"), ("yellow", "#ba8523"), ("cyan", "#575b5b"), ("blue", "#4a3b5b"),
+                  ("green", "#4c532a"), ("gray", "#392a23"), ("black", "#251610")]:
+    add(f"{col}_terracotta", f"{col}_terracotta", name=f"{col.title()} Terracotta", color=hexc, tex={"all": ["flat", hexc]})
+for col, hexc in [("white", "#f0f0f0"), ("red", "#b03030"), ("yellow", "#e5d030"), ("blue", "#3050c0"),
+                  ("purple", "#8a3fc0"), ("green", "#607a30"), ("orange", "#e08030")]:
+    add(f"{col}_glass_pane", f"{col}_stained_glass_pane", "pane", f"{col.title()} Stained Glass Pane", "deco", hexc,
+        {"all": ["glass_tint", hexc]}, derived=["connections"])
+for col, hexc in [("blue", "#35399d"), ("green", "#546d1b"), ("cyan", "#158991"), ("orange", "#f07613"),
+                  ("purple", "#7a2aad"), ("pink", "#ed8dac"), ("gray", "#3e4447"), ("black", "#15151a"),
+                  ("light_blue", "#3aafd9"), ("magenta", "#bd44b3")]:
+    t = col.replace("_", " ").title()
+    if f"{col}_wool" not in BLOCKS:
+        add(f"{col}_wool", f"{col}_wool", name=f"{t} Wool", cat="deco", color=hexc, tex={"all": ["wool", hexc]})
+        add(f"{col}_carpet", f"{col}_carpet", "carpet", f"{t} Carpet", "deco", hexc, {"all": ["wool", hexc]})
+for key, hexc, pat in [("tuff", "#6c6d66", "stone"), ("diorite", "#bcbcbc", "stone"), ("granite", "#956755", "stone"),
+                       ("cracked_stone_bricks", "#767676", "stone_bricks"), ("polished_diorite", "#c1c1c3", "smooth"),
+                       ("packed_ice", "#8db4fa", "smooth"), ("blue_ice", "#74a8fd", "smooth")]:
+    add(key, key, name=key.replace("_", " ").title(), cat="stone" if "ice" not in key else "nature", color=hexc,
+        tex={"all": [pat, hexc]})
+add("smooth_quartz", "smooth_quartz", name="Smooth Quartz", color="#ece6df", tex={"all": ["smooth", "#ece6df"]},
+    props={"axis": "y"}, map=AXIS_MAP)
+add("blue_orchid", "blue_orchid", "plant", cat="plants", color="#2aa2d0",
+    tex={"all": ["flower", "#3f7a24", "#2aa2d0", "#1a6a90"]}, needs="soil")
+for wood, bid in [("oak", "wooden_pressure_plate"), ("spruce", "spruce_pressure_plate"), ("birch", "birch_pressure_plate"),
+                  ("dark_oak", "dark_oak_pressure_plate")]:
+    c = WOODS[wood][0]
+    add(f"{wood}_pressure_plate", bid, "carpet", f"{wood.replace('_', ' ').title()} Pressure Plate", "deco", c,
+        {"all": ["planks", c]}, states={"redstone_signal": 0})
+CARD_ONLY = {"facing": ("minecraft:cardinal_direction", CARD)}
+add("lectern", "lectern", "chest", "Lectern", "utility", "#8a6a3a", {"all": ["planks", "#9a7a45"], "top": ["bookshelf", "#9a7a45"]},
+    {"facing": "north"}, CARD_ONLY, states={"powered_bit": False})
+add("anvil", "anvil", "chest", "Anvil", "utility", "#444444", {"all": ["metal", "#4a4a4a"]}, {"facing": "north"}, CARD_ONLY)
+add("blast_furnace", "blast_furnace", name="Blast Furnace", cat="utility", color="#505050",
+    tex={"all": ["smooth", "#505050"], "front": ["furnace_front", "#505050"]}, props={"facing": "north"}, map=CARD_ONLY)
+add("stonecutter", "stonecutter_block", "slab", "Stonecutter", "utility", "#7a7a7a", {"all": ["metal", "#8a8a8a"]},
+    {"facing": "north"}, CARD_ONLY)
+add("loom", "loom", name="Loom", cat="utility", color="#b08a5a", tex={"all": ["planks", "#b08a5a"], "top": ["crafting_top", "#b08a5a"]},
+    props={"facing": "north"}, map={"facing": ("direction", BEDDIR)})
+add("cartography_table", "cartography_table", name="Cartography Table", cat="utility", color="#6a4a2a",
+    tex={"top": ["crafting_top", "#c8b48a"], "side": ["planks", "#6a4a2a"]})
+add("smithing_table", "smithing_table", name="Smithing Table", cat="utility", color="#3a3a44",
+    tex={"top": ["metal", "#3a3a44"], "side": ["planks", "#5a3a2a"]})
+add("jukebox", "jukebox", name="Jukebox", cat="utility", color="#6a4a3a", tex={"all": ["planks", "#6a4a3a"], "top": ["metal", "#3a3a3a"]})
+add("brewing_stand", "brewing_stand", "pot", "Brewing Stand", "utility", "#7a6a5a", {"all": ["metal", "#7a6a5a"]},
+    states={"brewing_stand_slot_a_bit": False, "brewing_stand_slot_b_bit": False, "brewing_stand_slot_c_bit": False})
+add("cauldron", "cauldron", "chest", "Cauldron", "utility", "#3a3a3a", {"all": ["metal", "#3a3a3a"]},
+    states={"cauldron_liquid": "water", "fill_level": 0})
+add("cake", "cake", "pot", "Cake", "deco", "#f0e0d0", {"all": ["wool", "#f0e0d0"]}, states={"bite_counter": 0})
+add("white_candle", "white_candle", "pot", "White Candle", "light", "#eeeeee", {"all": ["flat", "#eeeeee"]},
+    states={"candles": 2, "lit": True}, light=9)
+add("bell", "bell", "lantern", "Bell", "utility", "#e0b030", {"all": ["metal", "#e0b030"]},
+    {"facing": "north", "hanging": True},
+    {"facing": ("direction", BEDDIR), "hanging": ("attachment", {True: "hanging", False: "standing"})},
+    states={"toggle_bit": False})
+add("cobweb", "web", "plant", "Cobweb", "deco", "#dddddd", {"all": ["grass_plant", "#e8e8e8"]}, needs="below_top")
+
 # Explicit air: carves terrain / existing blocks. Never counted.
 add("air", "air", "air", "Air", "utility", "#000000", {"all": ["flat", "#000000"]})
 

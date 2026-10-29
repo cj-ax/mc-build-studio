@@ -220,14 +220,22 @@ def subtract_rect(r, hole):
 
 # ---------------------------------------------------------------- per-facing command sets
 def site_rects(b, facing):
-    """Prep region (relative) minus keep-zones."""
+    """Prep regions (relative) as [(rect, grade)]: the site minus keep-zones, split by terrace grade."""
     w, d = b.footprint
     mg = PREP_MARGIN
-    rects = [rect_rel(b, facing, -mg, -mg, w - 1 + mg, d - 1 + mg)]
-    for k in b.keep_zones:
-        hole = rect_rel(b, facing, *k["box"])
-        rects = [piece for r in rects for piece in subtract_rect(r, hole)]
-    return rects
+    holes = [k["box"] for k in b.keep_zones]
+    base = [(-mg, -mg, w - 1 + mg, d - 1 + mg)]
+    out = []
+    for g in b.grades:
+        base = [piece for r in base for piece in subtract_rect(r, g["box"])]
+        rects = [tuple(g["box"])]
+        for h in holes:
+            rects = [piece for r in rects for piece in subtract_rect(r, h)]
+        out += [(r, g["y"]) for r in rects]
+    for h in holes:
+        base = [piece for r in base for piece in subtract_rect(r, h)]
+    out = [(r, 0) for r in base] + out
+    return [(rect_rel(b, facing, *r), g) for r, g in out]
 
 
 def commands_for(b, facing):
@@ -260,14 +268,17 @@ def commands_for(b, facing):
                         for name, a in tick],
                       f"say {b.title}: site loaded ({len(tick)} ticking area). Next: /function {ns}/{facing}/build"]
 
-    prep = [f"# Step 1: Clear and level the land - clear above grade, fill holes below grade. Keep-zones untouched."]
-    for (x1, z1, x2, z2) in site_rects(b, facing):
-        for bx in split_volume(x1, 0, z1, x2, clear_top, z2):
+    prep = [f"# Step 1: Clear and level the land - clear above grade, fill holes below grade "
+            "(terraces raised to their own grade). Keep-zones untouched."]
+    for (x1, z1, x2, z2), g in site_rects(b, facing):
+        if g:
+            prep.append(f"# terrace at +{g}")
+        for bx in split_volume(x1, g, z1, x2, clear_top, z2):
             prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:air")
-        for bx in split_volume(x1, -3, z1, x2, -2, z2):
+        for bx in split_volume(x1, min(-3, g - 4), z1, x2, g - 2, z2):
             for src in ("minecraft:air", "minecraft:water", "minecraft:flowing_water"):
                 prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:dirt replace {src}")
-        for bx in split_volume(x1, -1, z1, x2, -1, z2):
+        for bx in split_volume(x1, g - 1, z1, x2, g - 1, z2):
             for src in ("minecraft:air", "minecraft:water", "minecraft:flowing_water"):
                 prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:grass_block replace {src}")
     files["step01_site"] = prep
@@ -366,12 +377,15 @@ def test_strip(b, facing, world, derived):
             seen[k] = (c, bid)
     # local frame: rows run along +x from the marker, stepping away from the build (-z)
     mx, my, mz = b.marker
-    z0 = min([p[2] for p in b.model.cells] + [0]) - 4
+    sx0, z0, zstep = mx, min([p[2] for p in b.model.cells] + [0]) - 4, -4
+    if b.test_strip:
+        sx0, z0 = b.test_strip
+        zstep = 4 if z0 >= b.footprint[1] else -4
     lines, cells = [], []
     items = [(k, v) for k, v in sorted(seen.items())
              if not v[0]["props"].get("upper") and not v[0]["props"].get("head")]
     for i, (k, (c, bid)) in enumerate(items):
-        lx, lz = mx + (i % 16) * 3, z0 - (i // 16) * 4
+        lx, lz = sx0 + (i % 16) * 3, z0 + (i // 16) * zstep
         sh = block(c["key"])["shape"]
         base = "minecraft:farmland" if sh == "crop" else "minecraft:grass_block" if sh in ("plant", "tall_plant") else "minecraft:stone"
         R = lambda x, y, z: rel(b, facing, x, y, z)  # noqa: E731
@@ -404,7 +418,7 @@ def test_strip(b, facing, world, derived):
             ubid, ust = states_for(c["key"], up)
             lines.append(f"setblock {p3(*R(lx, 2, lz))} {block_str(ubid, ust)}")
     if not cells:
-        cells = [(mx, z0)]
+        cells = [(sx0, z0)]
     xs = [x for x, _ in cells]
     zs = [z for _, z in cells]
     r = rect_rel(b, facing, min(xs) - 1, min(zs) - 1, max(xs) + 1, max(zs) + 1)

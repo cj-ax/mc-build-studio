@@ -8901,6 +8901,2236 @@
    "needs": null,
    "item_cells": 1
   },
+  "red_concrete": {
+   "id": "minecraft:red_concrete",
+   "name": "Red Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#8e2121",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#8e2121"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "orange_concrete": {
+   "id": "minecraft:orange_concrete",
+   "name": "Orange Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#e06101",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#e06101"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "yellow_concrete": {
+   "id": "minecraft:yellow_concrete",
+   "name": "Yellow Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#f1af15",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#f1af15"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "lime_concrete": {
+   "id": "minecraft:lime_concrete",
+   "name": "Lime Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#5ea918",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#5ea918"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "green_concrete": {
+   "id": "minecraft:green_concrete",
+   "name": "Green Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#495b24",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#495b24"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cyan_concrete": {
+   "id": "minecraft:cyan_concrete",
+   "name": "Cyan Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#157788",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#157788"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "light_blue_concrete": {
+   "id": "minecraft:light_blue_concrete",
+   "name": "Light Blue Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#2489c7",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#2489c7"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "blue_concrete": {
+   "id": "minecraft:blue_concrete",
+   "name": "Blue Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#2c2e8f",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#2c2e8f"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "purple_concrete": {
+   "id": "minecraft:purple_concrete",
+   "name": "Purple Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#64209c",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#64209c"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "magenta_concrete": {
+   "id": "minecraft:magenta_concrete",
+   "name": "Magenta Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#a9309f",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#a9309f"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "pink_concrete": {
+   "id": "minecraft:pink_concrete",
+   "name": "Pink Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#d5658e",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#d5658e"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "black_concrete": {
+   "id": "minecraft:black_concrete",
+   "name": "Black Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#080a0f",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#080a0f"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "brown_concrete": {
+   "id": "minecraft:brown_concrete",
+   "name": "Brown Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#603c20",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#603c20"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "light_gray_concrete": {
+   "id": "minecraft:light_gray_concrete",
+   "name": "Light Gray Concrete",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#7d7d73",
+   "tex": {
+    "all": [
+     "clapboard",
+     "#7d7d73"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "red_terracotta": {
+   "id": "minecraft:red_terracotta",
+   "name": "Red Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#8f3d2e",
+   "tex": {
+    "all": [
+     "flat",
+     "#8f3d2e"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "yellow_terracotta": {
+   "id": "minecraft:yellow_terracotta",
+   "name": "Yellow Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#ba8523",
+   "tex": {
+    "all": [
+     "flat",
+     "#ba8523"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cyan_terracotta": {
+   "id": "minecraft:cyan_terracotta",
+   "name": "Cyan Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#575b5b",
+   "tex": {
+    "all": [
+     "flat",
+     "#575b5b"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "blue_terracotta": {
+   "id": "minecraft:blue_terracotta",
+   "name": "Blue Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#4a3b5b",
+   "tex": {
+    "all": [
+     "flat",
+     "#4a3b5b"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "green_terracotta": {
+   "id": "minecraft:green_terracotta",
+   "name": "Green Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#4c532a",
+   "tex": {
+    "all": [
+     "flat",
+     "#4c532a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "gray_terracotta": {
+   "id": "minecraft:gray_terracotta",
+   "name": "Gray Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#392a23",
+   "tex": {
+    "all": [
+     "flat",
+     "#392a23"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "black_terracotta": {
+   "id": "minecraft:black_terracotta",
+   "name": "Black Terracotta",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#251610",
+   "tex": {
+    "all": [
+     "flat",
+     "#251610"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "white_glass_pane": {
+   "id": "minecraft:white_stained_glass_pane",
+   "name": "White Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#f0f0f0",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#f0f0f0"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "red_glass_pane": {
+   "id": "minecraft:red_stained_glass_pane",
+   "name": "Red Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#b03030",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#b03030"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "yellow_glass_pane": {
+   "id": "minecraft:yellow_stained_glass_pane",
+   "name": "Yellow Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#e5d030",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#e5d030"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "blue_glass_pane": {
+   "id": "minecraft:blue_stained_glass_pane",
+   "name": "Blue Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#3050c0",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#3050c0"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "purple_glass_pane": {
+   "id": "minecraft:purple_stained_glass_pane",
+   "name": "Purple Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#8a3fc0",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#8a3fc0"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "green_glass_pane": {
+   "id": "minecraft:green_stained_glass_pane",
+   "name": "Green Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#607a30",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#607a30"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "orange_glass_pane": {
+   "id": "minecraft:orange_stained_glass_pane",
+   "name": "Orange Stained Glass Pane",
+   "cat": "deco",
+   "shape": "pane",
+   "color": "#e08030",
+   "tex": {
+    "all": [
+     "glass_tint",
+     "#e08030"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [
+    "connections"
+   ],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cyan_wool": {
+   "id": "minecraft:cyan_wool",
+   "name": "Cyan Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#158991",
+   "tex": {
+    "all": [
+     "wool",
+     "#158991"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cyan_carpet": {
+   "id": "minecraft:cyan_carpet",
+   "name": "Cyan Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#158991",
+   "tex": {
+    "all": [
+     "wool",
+     "#158991"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "orange_wool": {
+   "id": "minecraft:orange_wool",
+   "name": "Orange Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#f07613",
+   "tex": {
+    "all": [
+     "wool",
+     "#f07613"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "orange_carpet": {
+   "id": "minecraft:orange_carpet",
+   "name": "Orange Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#f07613",
+   "tex": {
+    "all": [
+     "wool",
+     "#f07613"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "purple_wool": {
+   "id": "minecraft:purple_wool",
+   "name": "Purple Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#7a2aad",
+   "tex": {
+    "all": [
+     "wool",
+     "#7a2aad"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "purple_carpet": {
+   "id": "minecraft:purple_carpet",
+   "name": "Purple Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#7a2aad",
+   "tex": {
+    "all": [
+     "wool",
+     "#7a2aad"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "pink_wool": {
+   "id": "minecraft:pink_wool",
+   "name": "Pink Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#ed8dac",
+   "tex": {
+    "all": [
+     "wool",
+     "#ed8dac"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "pink_carpet": {
+   "id": "minecraft:pink_carpet",
+   "name": "Pink Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#ed8dac",
+   "tex": {
+    "all": [
+     "wool",
+     "#ed8dac"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "gray_wool": {
+   "id": "minecraft:gray_wool",
+   "name": "Gray Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#3e4447",
+   "tex": {
+    "all": [
+     "wool",
+     "#3e4447"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "gray_carpet": {
+   "id": "minecraft:gray_carpet",
+   "name": "Gray Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#3e4447",
+   "tex": {
+    "all": [
+     "wool",
+     "#3e4447"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "black_wool": {
+   "id": "minecraft:black_wool",
+   "name": "Black Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#15151a",
+   "tex": {
+    "all": [
+     "wool",
+     "#15151a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "black_carpet": {
+   "id": "minecraft:black_carpet",
+   "name": "Black Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#15151a",
+   "tex": {
+    "all": [
+     "wool",
+     "#15151a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "light_blue_wool": {
+   "id": "minecraft:light_blue_wool",
+   "name": "Light Blue Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#3aafd9",
+   "tex": {
+    "all": [
+     "wool",
+     "#3aafd9"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "light_blue_carpet": {
+   "id": "minecraft:light_blue_carpet",
+   "name": "Light Blue Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#3aafd9",
+   "tex": {
+    "all": [
+     "wool",
+     "#3aafd9"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "magenta_wool": {
+   "id": "minecraft:magenta_wool",
+   "name": "Magenta Wool",
+   "cat": "deco",
+   "shape": "cube",
+   "color": "#bd44b3",
+   "tex": {
+    "all": [
+     "wool",
+     "#bd44b3"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "magenta_carpet": {
+   "id": "minecraft:magenta_carpet",
+   "name": "Magenta Carpet",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#bd44b3",
+   "tex": {
+    "all": [
+     "wool",
+     "#bd44b3"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "tuff": {
+   "id": "minecraft:tuff",
+   "name": "Tuff",
+   "cat": "stone",
+   "shape": "cube",
+   "color": "#6c6d66",
+   "tex": {
+    "all": [
+     "stone",
+     "#6c6d66"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "diorite": {
+   "id": "minecraft:diorite",
+   "name": "Diorite",
+   "cat": "stone",
+   "shape": "cube",
+   "color": "#bcbcbc",
+   "tex": {
+    "all": [
+     "stone",
+     "#bcbcbc"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "granite": {
+   "id": "minecraft:granite",
+   "name": "Granite",
+   "cat": "stone",
+   "shape": "cube",
+   "color": "#956755",
+   "tex": {
+    "all": [
+     "stone",
+     "#956755"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cracked_stone_bricks": {
+   "id": "minecraft:cracked_stone_bricks",
+   "name": "Cracked Stone Bricks",
+   "cat": "stone",
+   "shape": "cube",
+   "color": "#767676",
+   "tex": {
+    "all": [
+     "stone_bricks",
+     "#767676"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "polished_diorite": {
+   "id": "minecraft:polished_diorite",
+   "name": "Polished Diorite",
+   "cat": "stone",
+   "shape": "cube",
+   "color": "#c1c1c3",
+   "tex": {
+    "all": [
+     "smooth",
+     "#c1c1c3"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "packed_ice": {
+   "id": "minecraft:packed_ice",
+   "name": "Packed Ice",
+   "cat": "nature",
+   "shape": "cube",
+   "color": "#8db4fa",
+   "tex": {
+    "all": [
+     "smooth",
+     "#8db4fa"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "blue_ice": {
+   "id": "minecraft:blue_ice",
+   "name": "Blue Ice",
+   "cat": "nature",
+   "shape": "cube",
+   "color": "#74a8fd",
+   "tex": {
+    "all": [
+     "smooth",
+     "#74a8fd"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "smooth_quartz": {
+   "id": "minecraft:smooth_quartz",
+   "name": "Smooth Quartz",
+   "cat": "building",
+   "shape": "cube",
+   "color": "#ece6df",
+   "tex": {
+    "all": [
+     "smooth",
+     "#ece6df"
+    ]
+   },
+   "props": {
+    "axis": "y"
+   },
+   "map": {
+    "axis": {
+     "state": "pillar_axis",
+     "values": {
+      "x": "x",
+      "y": "y",
+      "z": "z"
+     }
+    }
+   },
+   "rotate": {
+    "axis": "axis"
+   },
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "blue_orchid": {
+   "id": "minecraft:blue_orchid",
+   "name": "Blue Orchid",
+   "cat": "plants",
+   "shape": "plant",
+   "color": "#2aa2d0",
+   "tex": {
+    "all": [
+     "flower",
+     "#3f7a24",
+     "#2aa2d0",
+     "#1a6a90"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "soil",
+   "item_cells": 1
+  },
+  "oak_pressure_plate": {
+   "id": "minecraft:wooden_pressure_plate",
+   "name": "Oak Pressure Plate",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#a2834f",
+   "tex": {
+    "all": [
+     "planks",
+     "#a2834f"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "redstone_signal": 0
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "spruce_pressure_plate": {
+   "id": "minecraft:spruce_pressure_plate",
+   "name": "Spruce Pressure Plate",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#735531",
+   "tex": {
+    "all": [
+     "planks",
+     "#735531"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "redstone_signal": 0
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "birch_pressure_plate": {
+   "id": "minecraft:birch_pressure_plate",
+   "name": "Birch Pressure Plate",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#c4b27a",
+   "tex": {
+    "all": [
+     "planks",
+     "#c4b27a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "redstone_signal": 0
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "dark_oak_pressure_plate": {
+   "id": "minecraft:dark_oak_pressure_plate",
+   "name": "Dark Oak Pressure Plate",
+   "cat": "deco",
+   "shape": "carpet",
+   "color": "#4c3219",
+   "tex": {
+    "all": [
+     "planks",
+     "#4c3219"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "redstone_signal": 0
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "lectern": {
+   "id": "minecraft:lectern",
+   "name": "Lectern",
+   "cat": "utility",
+   "shape": "chest",
+   "color": "#8a6a3a",
+   "tex": {
+    "all": [
+     "planks",
+     "#9a7a45"
+    ],
+    "top": [
+     "bookshelf",
+     "#9a7a45"
+    ]
+   },
+   "props": {
+    "facing": "north"
+   },
+   "map": {
+    "facing": {
+     "state": "minecraft:cardinal_direction",
+     "values": {
+      "north": "north",
+      "east": "east",
+      "south": "south",
+      "west": "west"
+     }
+    }
+   },
+   "rotate": {
+    "facing": "dir4"
+   },
+   "states": {
+    "powered_bit": false
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "anvil": {
+   "id": "minecraft:anvil",
+   "name": "Anvil",
+   "cat": "utility",
+   "shape": "chest",
+   "color": "#444444",
+   "tex": {
+    "all": [
+     "metal",
+     "#4a4a4a"
+    ]
+   },
+   "props": {
+    "facing": "north"
+   },
+   "map": {
+    "facing": {
+     "state": "minecraft:cardinal_direction",
+     "values": {
+      "north": "north",
+      "east": "east",
+      "south": "south",
+      "west": "west"
+     }
+    }
+   },
+   "rotate": {
+    "facing": "dir4"
+   },
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "blast_furnace": {
+   "id": "minecraft:blast_furnace",
+   "name": "Blast Furnace",
+   "cat": "utility",
+   "shape": "cube",
+   "color": "#505050",
+   "tex": {
+    "all": [
+     "smooth",
+     "#505050"
+    ],
+    "front": [
+     "furnace_front",
+     "#505050"
+    ]
+   },
+   "props": {
+    "facing": "north"
+   },
+   "map": {
+    "facing": {
+     "state": "minecraft:cardinal_direction",
+     "values": {
+      "north": "north",
+      "east": "east",
+      "south": "south",
+      "west": "west"
+     }
+    }
+   },
+   "rotate": {
+    "facing": "dir4"
+   },
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "stonecutter": {
+   "id": "minecraft:stonecutter_block",
+   "name": "Stonecutter",
+   "cat": "utility",
+   "shape": "slab",
+   "color": "#7a7a7a",
+   "tex": {
+    "all": [
+     "metal",
+     "#8a8a8a"
+    ]
+   },
+   "props": {
+    "facing": "north"
+   },
+   "map": {
+    "facing": {
+     "state": "minecraft:cardinal_direction",
+     "values": {
+      "north": "north",
+      "east": "east",
+      "south": "south",
+      "west": "west"
+     }
+    }
+   },
+   "rotate": {
+    "facing": "dir4"
+   },
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "lightblock": 1,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "loom": {
+   "id": "minecraft:loom",
+   "name": "Loom",
+   "cat": "utility",
+   "shape": "cube",
+   "color": "#b08a5a",
+   "tex": {
+    "all": [
+     "planks",
+     "#b08a5a"
+    ],
+    "top": [
+     "crafting_top",
+     "#b08a5a"
+    ]
+   },
+   "props": {
+    "facing": "north"
+   },
+   "map": {
+    "facing": {
+     "state": "direction",
+     "values": {
+      "south": 0,
+      "west": 1,
+      "north": 2,
+      "east": 3
+     }
+    }
+   },
+   "rotate": {
+    "facing": "dir4"
+   },
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cartography_table": {
+   "id": "minecraft:cartography_table",
+   "name": "Cartography Table",
+   "cat": "utility",
+   "shape": "cube",
+   "color": "#6a4a2a",
+   "tex": {
+    "top": [
+     "crafting_top",
+     "#c8b48a"
+    ],
+    "side": [
+     "planks",
+     "#6a4a2a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "smithing_table": {
+   "id": "minecraft:smithing_table",
+   "name": "Smithing Table",
+   "cat": "utility",
+   "shape": "cube",
+   "color": "#3a3a44",
+   "tex": {
+    "top": [
+     "metal",
+     "#3a3a44"
+    ],
+    "side": [
+     "planks",
+     "#5a3a2a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "jukebox": {
+   "id": "minecraft:jukebox",
+   "name": "Jukebox",
+   "cat": "utility",
+   "shape": "cube",
+   "color": "#6a4a3a",
+   "tex": {
+    "all": [
+     "planks",
+     "#6a4a3a"
+    ],
+    "top": [
+     "metal",
+     "#3a3a3a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 1,
+    "opaque": 1,
+    "sturdy": 1,
+    "top": 1,
+    "walk": 0,
+    "bottom": 1
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "brewing_stand": {
+   "id": "minecraft:brewing_stand",
+   "name": "Brewing Stand",
+   "cat": "utility",
+   "shape": "pot",
+   "color": "#7a6a5a",
+   "tex": {
+    "all": [
+     "metal",
+     "#7a6a5a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "brewing_stand_slot_a_bit": false,
+    "brewing_stand_slot_b_bit": false,
+    "brewing_stand_slot_c_bit": false
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "cauldron": {
+   "id": "minecraft:cauldron",
+   "name": "Cauldron",
+   "cat": "utility",
+   "shape": "chest",
+   "color": "#3a3a3a",
+   "tex": {
+    "all": [
+     "metal",
+     "#3a3a3a"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "cauldron_liquid": "water",
+    "fill_level": 0
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 1,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": null,
+   "item_cells": 1
+  },
+  "cake": {
+   "id": "minecraft:cake",
+   "name": "Cake",
+   "cat": "deco",
+   "shape": "pot",
+   "color": "#f0e0d0",
+   "tex": {
+    "all": [
+     "wool",
+     "#f0e0d0"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "bite_counter": 0
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "white_candle": {
+   "id": "minecraft:white_candle",
+   "name": "White Candle",
+   "cat": "light",
+   "shape": "pot",
+   "color": "#eeeeee",
+   "tex": {
+    "all": [
+     "flat",
+     "#eeeeee"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {
+    "candles": 2,
+    "lit": true
+   },
+   "derived": [],
+   "light": 9,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 0,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
+  "bell": {
+   "id": "minecraft:bell",
+   "name": "Bell",
+   "cat": "utility",
+   "shape": "lantern",
+   "color": "#e0b030",
+   "tex": {
+    "all": [
+     "metal",
+     "#e0b030"
+    ]
+   },
+   "props": {
+    "facing": "north",
+    "hanging": true
+   },
+   "map": {
+    "facing": {
+     "state": "direction",
+     "values": {
+      "south": 0,
+      "west": 1,
+      "north": 2,
+      "east": 3
+     }
+    },
+    "hanging": {
+     "state": "attachment",
+     "values": {
+      "true": "hanging",
+      "false": "standing"
+     }
+    }
+   },
+   "rotate": {
+    "facing": "dir4",
+    "hanging": "none"
+   },
+   "states": {
+    "toggle_bit": false
+   },
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "lantern",
+   "item_cells": 1
+  },
+  "cobweb": {
+   "id": "minecraft:web",
+   "name": "Cobweb",
+   "cat": "deco",
+   "shape": "plant",
+   "color": "#dddddd",
+   "tex": {
+    "all": [
+     "grass_plant",
+     "#e8e8e8"
+    ]
+   },
+   "props": {},
+   "map": {},
+   "rotate": {},
+   "states": {},
+   "derived": [],
+   "light": 0,
+   "flags": {
+    "full": 0,
+    "opaque": 0,
+    "sturdy": 0,
+    "top": 0,
+    "walk": 1,
+    "bottom": 0
+   },
+   "needs": "below_top",
+   "item_cells": 1
+  },
   "air": {
    "id": "minecraft:air",
    "name": "Air",

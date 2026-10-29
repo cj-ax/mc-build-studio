@@ -292,7 +292,9 @@
     }
   }
 
+  // grade: number, or function (x, z) -> y of the grass block
   function terrainInto(v, x1, z1, x2, z2, grade, water, decorRects, decor) {
+    const gradeAt = typeof grade === "function" ? grade : () => grade;
     const g = pal.variant("grass_block"), d = pal.variant("dirt"), w = pal.variant("water"), sand = pal.variant("sand");
     const deco = decor ? ["short_grass", "short_grass", "short_grass", "poppy", "dandelion", "short_grass", "fern"].map((k) => pal.variant(k)) : [];
     let seed = 99;
@@ -300,17 +302,18 @@
     for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
       let wa = null;
       for (const a of water) if (x >= a.rect[0] && x <= a.rect[2] && z >= a.rect[1] && z <= a.rect[3]) wa = a;
-      for (let y = grade - 4; y <= grade; y++) v.set(x, y, z, y === grade ? g : d);
+      const gy = gradeAt(x, z);
+      for (let y = Math.min(gy, 0) - 4; y <= gy; y++) v.set(x, y, z, y === gy ? g : d);
       if (wa) {
         const surf = wa.surface, bottom = surf - wa.depth + 1;
-        for (let y = bottom; y <= grade; y++) v.clear(x, y, z);
+        for (let y = bottom; y <= gy; y++) v.clear(x, y, z);
         for (let y = bottom; y <= surf; y++) v.set(x, y, z, w);
         v.set(x, bottom - 1, z, sand);
         continue;
       }
       const r = rnd();
       if (decor && r < decor && !decorRects.some((q) => x >= q[0] - 1 && x <= q[2] + 1 && z >= q[1] - 1 && z <= q[3] + 1))
-        v.set(x, grade + 1, z, deco[(rnd() * deco.length) | 0]);
+        v.set(x, gy + 1, z, deco[(rnd() * deco.length) | 0]);
     }
   }
 
@@ -323,10 +326,15 @@
     const t = w.terrain;
     const [x1, z1, x2, z2] = t.bounds;
     let ymax = t.grade + 6, ymin = t.grade - 8;
+    for (const b of w.builds) for (const g of b.grades || []) ymax = Math.max(ymax, g.y + 4);
     for (const b of w.builds) for (let i = 1; i < b.cells.length; i += 4) { ymax = Math.max(ymax, b.cells[i] + 3); ymin = Math.min(ymin, b.cells[i] - 2); }
     for (const a of t.water) ymin = Math.min(ymin, a.surface - a.depth - 2);
     vol = new MC.Vol(x1, ymin, z1, x2 - x1 + 1, ymax - ymin + 1, z2 - z1 + 1);
-    terrainInto(vol, x1, z1, x2, z2, t.grade, t.water, w.builds.map((b) => b.rect), t.decor || 0);
+    const wg = new Map();
+    for (const b of w.builds) for (const g of b.grades || [])
+      for (let x = g.rect[0]; x <= g.rect[2]; x++) for (let z = g.rect[1]; z <= g.rect[3]; z++) wg.set(x + "," + z, g.y);
+    terrainInto(vol, x1, z1, x2, z2, (x, z) => { const g = wg.get(x + "," + z); return g == null ? t.grade : g; },
+      t.water, w.builds.map((b) => b.rect), t.decor || 0);
     const vmap = w.variants.map(([k, p]) => pal.variant(k, p));
     const air = pal.variant("air");
     for (const b of w.builds) {
@@ -401,12 +409,15 @@
     const x0 = B.x1 - m, z0 = B.z1 - m, y0 = Math.min(B.y1, -4) - 2;
     const sx = B.x2 - B.x1 + 1 + 2 * m, sy = B.y2 - y0 + 6, sz = B.z2 - B.z1 + 1 + 2 * m;
     vol = new MC.Vol(x0, y0, z0, sx, sy, sz);
-    const water = b.keep_zones.filter((k) => k.what === "water").map((k) => ({ rect: k.box, surface: -1, depth: k.depth }));
+    const water = b.keep_zones.filter((k) => k.what === "water").map((k) => ({ rect: k.box, surface: k.surface == null ? -1 : k.surface, depth: k.depth }));
+    const gmap = new Map();
+    for (const g of b.grades || []) for (let x = g.box[0]; x <= g.box[2]; x++) for (let z = g.box[1]; z <= g.box[3]; z++) gmap.set(x + "," + z, g.y - 1);
+    const gfn = (x, z) => { const g = gmap.get(x + "," + z); return g == null ? -1 : g; };
     const xray = [];
     const waterId = pal.variant("water"), air = pal.variant("air");
     if (S.xray) {
       const tv = new MC.Vol(x0, y0, z0, sx, sy, sz);
-      terrainInto(tv, x0, z0, x0 + sx - 1, z0 + sz - 1, -1, water, [], 0);
+      terrainInto(tv, x0, z0, x0 + sx - 1, z0 + sz - 1, gfn, water, [], 0);
       for (let i = 0; i < tv.ids.length; i++) {
         const id = tv.ids[i] - 1;
         if (id < 0) continue;
@@ -414,7 +425,7 @@
         const x = (i % sx) + x0, z = (((i / sx) | 0) % sz) + z0, y = ((i / (sx * sz)) | 0) + y0;
         if (!S.cells.has(x + "," + y + "," + z)) xray.push([x, y, z, id]);
       }
-    } else terrainInto(vol, x0, z0, x0 + sx - 1, z0 + sz - 1, -1, water, [], 0);
+    } else terrainInto(vol, x0, z0, x0 + sx - 1, z0 + sz - 1, gfn, water, [], 0);
     const ghost = [];
     for (const [k, c] of S.cells) {
       const [x, y, z] = k.split(",").map(Number);
@@ -512,7 +523,7 @@
     const s = (S.book.secrets || [])[i];
     if (!s) return;
     const [x, y, z] = s.pos;
-    if (y < 0) { S.xray = true; S.cut = y; remesh(); renderPills(); }   // underground: see through and cut down to it
+    if (y < 0 || s.xray) { S.xray = true; S.cut = y + 1; remesh(); renderPills(); }   // underground: see through, cut down to it
     // approach from the nearest outside edge of the footprint
     const dx = S.b.footprint[0] / 2 - (x + 0.5), dz = S.b.footprint[1] / 2 - (z + 0.5);
     const yaw = Math.hypot(dx, dz) > 2 ? Math.atan2(-dx, -dz) : -Math.PI * 0.75;
@@ -898,7 +909,7 @@
     }
     pill("Approach", S.lastView === "approach", view("approach"), "Eye level, from the front");
     pill("Aerial", S.lastView === "aerial", view("aerial"));
-    for (const a of S.b.areas) if (!a.ring) pill(a.title, S.lastView === "area:" + a.key, view("area:" + a.key), a.desc);
+    for (const a of S.b.areas) if (!a.ring && a.pill !== false) pill(a.title, S.lastView === "area:" + a.key, view("area:" + a.key), a.desc);
     pill("Plan", S.lastView === "plan", view("plan"), "Straight down, front at the top");
     pill("X-ray ground", S.xray, () => toggle("xray"), "See through the ground (X)");
     pill("Ghost later steps", S.ghost, () => toggle("ghost"), "Show what comes after this step (G)");
@@ -1260,7 +1271,7 @@
         }
       } else if (S.b) {
         for (const a of S.b.areas) {
-          if (a.ring) continue;
+          if (a.ring || a.label === false) continue;
           let top = 0;
           for (const k of S.cells.keys()) {
             const [x, y, z] = k.split(",").map(Number);

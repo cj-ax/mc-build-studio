@@ -80,4 +80,102 @@ def shed_roof(m, x1, z1, x2, z2, y, rises="south", stairs="spruce_stairs", overh
     return y + rise(x2 if dx > 0 else x1, z2 if dz > 0 else z1)
 
 
-__all__ = ["gable_roof", "shed_roof", "OPP"]
+def two_slope_roof(m, x1, z1, x2, z2, y_front, y_back, stairs="deepslate_tile_stairs", gable="white_concrete",
+                   ridge="deepslate_tiles", cap="deepslate_tile_slab", overhang=1, gable_overhang=1, fill_gables=True):
+    """Ridge along x. The front (north) slope starts at y_front over the front eave, the back
+    slope at y_back over the back eave; each rises one block per row until they meet.
+    y_front == y_back is a plain gable; y_back = y_front - storey height is a saltbox.
+    Returns (H, top): H(z) = height of the roof surface block over row z.
+    """
+    zf, zb = z1 - overhang, z2 + overhang
+
+    def H(z):
+        return min(y_front + (z - zf), y_back + (zb - z))
+
+    xs = range(x1 - gable_overhang, x2 + gable_overhang + 1)
+    top = -10 ** 9
+    with m.tag("roof"):
+        for z in range(zf, zb + 1):
+            hf, hb = y_front + (z - zf), y_back + (zb - z)
+            for x in xs:
+                if hf < hb:
+                    m.put(x, hf, z, stairs, facing="south")
+                elif hb < hf:
+                    m.put(x, hb, z, stairs, facing="north")
+                else:
+                    m.put(x, hf, z, ridge)
+                    if cap:
+                        m.put(x, hf + 1, z, cap)
+            top = max(top, min(hf, hb))
+        # back-to-back stairs at an even ridge get a slab cap too
+        if cap:
+            for z in range(zf, zb):
+                if y_front + (z - zf) < y_back + (zb - z) and y_back + (zb - (z + 1)) < y_front + (z + 1 - zf):
+                    for x in xs:
+                        if m.empty(x, H(z) + 1, z):
+                            m.put(x, H(z) + 1, z, cap)
+                        if m.empty(x, H(z + 1) + 1, z + 1):
+                            m.put(x, H(z + 1) + 1, z + 1, cap)
+    if fill_gables:
+        for x in (x1, x2):
+            for z in range(z1, z2 + 1):
+                for y in range(min(y_front, y_back), H(z)):
+                    if m.empty(x, y, z):
+                        m.put(x, y, z, gable)
+    return H, top + (1 if cap else 0)
+
+
+def hip_roof(m, x1, z1, x2, z2, y, stairs="deepslate_tile_stairs", cap="deepslate_tile_slab", flat="deepslate_tiles",
+             overhang=1, rings=None):
+    """Hip roof: rings of stairs rising inward from all four sides (corners form themselves).
+    rings limits the height (a low 'biscuit box' top); the middle is closed with `flat` + `cap`."""
+    ax1, az1, ax2, az2 = x1 - overhang, z1 - overhang, x2 + overhang, z2 + overhang
+    k = 0
+    with m.tag("roof"):
+        while ax2 - ax1 >= 2 and az2 - az1 >= 2 and (rings is None or k < rings):
+            yy = y + k
+            for x in range(ax1, ax2 + 1):
+                m.put(x, yy, az1, stairs, facing="south")
+                m.put(x, yy, az2, stairs, facing="north")
+            for z in range(az1 + 1, az2):
+                m.put(ax1, yy, z, stairs, facing="east")
+                m.put(ax2, yy, z, stairs, facing="west")
+            ax1, az1, ax2, az2 = ax1 + 1, az1 + 1, ax2 - 1, az2 - 1
+            k += 1
+        yy = y + k - 1
+        for x in range(ax1, ax2 + 1):
+            for z in range(az1, az2 + 1):
+                m.put(x, yy, z, flat)
+                if cap:
+                    m.put(x, yy + 1, z, cap)
+    return y + k
+
+
+def cross_gable(m, cx, z_front, y, half, depth, stairs="deepslate_tile_stairs", wall="white_concrete",
+                cap="deepslate_tile_slab", window="glass_pane", overhang=1, ridge="deepslate_tiles"):
+    """Small gable facing north on the front of a roof: ridge along z, centred on cx.
+    y is the eave height (same as the main front eave); half = half width of the gable wall.
+    The front wall (row z_front) rises into a triangle with a window in it."""
+    zs = range(z_front - overhang, z_front + depth)
+    with m.tag("roof"):
+        for z in zs:
+            for dx in range(-half - overhang, half + overhang + 1):
+                x = cx + dx
+                h = y + (half + overhang - abs(dx))
+                if dx < 0:
+                    m.put(x, h, z, stairs, facing="east")
+                elif dx > 0:
+                    m.put(x, h, z, stairs, facing="west")
+                else:
+                    m.put(x, h, z, ridge)
+                    if cap:
+                        m.put(x, h + 1, z, cap)
+    for dx in range(-half, half + 1):
+        h = y + (half + overhang - abs(dx))
+        for yy in range(y - 1, h):
+            m.put(cx + dx, yy, z_front, wall)
+    m.put(cx, y + 1, z_front, window)
+    m.put(cx, y + 2, z_front, window)
+
+
+__all__ = ["gable_roof", "shed_roof", "two_slope_roof", "hip_roof", "cross_gable", "OPP"]

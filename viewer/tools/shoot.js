@@ -31,12 +31,14 @@ function up(url) {
   }
   const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  page.setDefaultTimeout(600000);          // big builds take a while in software WebGL
+  page.setDefaultNavigationTimeout(600000);
   const errors = [];
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("pageerror", (e) => errors.push(String(e)));
   const open = async (q) => {
     await page.goto(`${base}/?${q}`);
-    await page.waitForFunction(() => window.studio && (window.studio.ready || window.studio.error), null, { timeout: 120000 });
+    await page.waitForFunction(() => window.studio && (window.studio.ready || window.studio.error), null, { timeout: 600000 });
     const err = await page.evaluate(() => window.studio.error);
     if (err) throw new Error(err);
   };

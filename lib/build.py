@@ -26,8 +26,30 @@ class Build:
     areas: list
     model: Model
     book: dict = field(default_factory=dict)       # viewer presentation: subtitle, subject, stats, levels, secrets
+    grades: list = field(default_factory=list)     # terraces: [{box, y}] feet level (grass top at y-1); default 0
+    test_strip: tuple = None                       # local (x, z) where test_blocks lays its strip
     edit_log: dict = field(default_factory=dict)
     problems: list = field(default_factory=list)
+
+    def grade_at(self, x, z):
+        """Feet level of the ground at (x, z): 0 unless a GRADES terrace covers it."""
+        g = self._gmap.get((x, z)) if hasattr(self, "_gmap") else None
+        if g is None and not hasattr(self, "_gmap"):
+            self._gmap = {}
+            for t in self.grades:
+                x1, z1, x2, z2 = t["box"]
+                for xx in range(x1, x2 + 1):
+                    for zz in range(z1, z2 + 1):
+                        self._gmap[(xx, zz)] = t["y"]
+            g = self._gmap.get((x, z))
+        return 0 if g is None else g
+
+    def keep_at(self, x, z):
+        for k in self.keep_zones:
+            x1, z1, x2, z2 = k["box"]
+            if x1 <= x <= x2 and z1 <= z <= z2:
+                return k
+        return None
 
 
 def names():
@@ -60,6 +82,8 @@ def norm_keep(zones):
         z.setdefault("y", (-8, 48))
         z.setdefault("what", "keep")
         z.setdefault("depth", 2)
+        z.setdefault("surface", -1)        # y of the top water block (water keep-zones, viewer + checks)
+        z.setdefault("build_ok", False)    # True: the build may stand piers/decks in it (still never prepped)
         z.setdefault("note", "")
         z["box"] = list(z["box"])
         z["y"] = list(z["y"])
@@ -111,6 +135,8 @@ def load(name, with_edits=True):
             steps_intro=getattr(mod, "STEPS_INTRO", ""),
             views=[dict(x) for x in getattr(mod, "VIEWS", [])],
         ),
+        grades=[dict(box=list(g["box"]), y=int(g["y"]), name=g.get("name", "")) for g in getattr(mod, "GRADES", [])],
+        test_strip=tuple(getattr(mod, "TEST_STRIP", ())) or None,
     )
     if with_edits:
         b.edit_log = apply_edits(b, read_edits(name))

@@ -12,11 +12,12 @@ from lib.palette import FACINGS, block, states_for
 from lib.voxel import DIRV, OPP
 
 SOIL = {"grass_block", "dirt", "coarse_dirt", "podzol", "moss_block", "farmland", "mud", "dirt_path"}
+GRAVITY = {"sand", "gravel"}
 N6 = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
 
 
 class Site:
-    """Model + flat terrain + keep-zones, in the build's local frame."""
+    """Model + terrain (flat grade, raised terraces, keep-zones), in the build's local frame."""
 
     def __init__(self, b):
         self.b = b
@@ -25,13 +26,29 @@ class Site:
         self.water = []
         for k in b.keep_zones:
             if k["what"] == "water":
-                self.water.append((k["box"], k["depth"]))
+                self.water.append((k["box"], k["surface"], k["depth"]))
 
     def keep_water(self, x, y, z):
-        for (x1, z1, x2, z2), depth in self.water:
-            if x1 <= x <= x2 and z1 <= z <= z2 and -depth <= y <= -1:
+        for (x1, z1, x2, z2), surf, depth in self.water:
+            if x1 <= x <= x2 and z1 <= z <= z2 and surf - depth < y <= surf:
                 return True
         return False
+
+    def in_water_zone(self, x, z):
+        return any(x1 <= x <= x2 and z1 <= z <= z2 for (x1, z1, x2, z2), _, _ in self.water)
+
+    def ground(self, x, y, z):
+        """Terrain at a cell the model leaves alone: 'grass_block', 'dirt', 'water' or None (air)."""
+        if self.in_water_zone(x, z):
+            for (x1, z1, x2, z2), surf, depth in self.water:
+                if x1 <= x <= x2 and z1 <= z <= z2:
+                    if y > surf:
+                        return None
+                    return "water" if y > surf - depth else "dirt"
+        g = self.b.grade_at(x, z)
+        if y >= g:
+            return None
+        return "grass_block" if y == g - 1 else "dirt"
 
     def at(self, p):
         """(key, props, flags, step index) or None for empty space."""
@@ -40,12 +57,9 @@ class Site:
             if c.key == "air":
                 return None
             return c.key, c.props, block(c.key)["flags"], self.step_ix[c.step]
-        x, y, z = p
-        if y >= 0:
+        key = self.ground(*p)
+        if key is None:
             return None
-        if self.keep_water(x, y, z):
-            return "water", {}, block("water")["flags"], -1
-        key = "grass_block" if y == -1 else "dirt"
         return key, {}, block(key)["flags"], -1
 
     def walk(self, p):
@@ -85,11 +99,18 @@ def run_checks(b):
     if outside:
         add(out, "error", "footprint", f"{len(outside)} blocks outside the {W}x{D} footprint", outside)
     for k in b.keep_zones:
+        if k["build_ok"]:
+            continue
         x1, z1, x2, z2 = k["box"]
         y1, y2 = k["y"]
         hit = [list(p) for p in m.cells if x1 <= p[0] <= x2 and z1 <= p[2] <= z2 and y1 <= p[1] <= y2]
         if hit:
             add(out, "error", "keep-zone", f"{len(hit)} blocks inside keep-zone {k['box']} ({k['note']})", hit)
+    for i, g in enumerate(b.grades):
+        for h in b.grades[i + 1:]:
+            if max(g["box"][0], h["box"][0]) <= min(g["box"][2], h["box"][2]) and \
+                    max(g["box"][1], h["box"][1]) <= min(g["box"][3], h["box"][3]):
+                add(out, "error", "grades", f"terraces {g['box']} and {h['box']} overlap")
     areas = b.areas
     acells = [area_cells(a) for a in areas]
     for i, a in enumerate(areas):
@@ -112,9 +133,13 @@ def run_checks(b):
     q = deque()
     for p, c in cells.items():
         x, y, z = p
-        if y <= -1 or (s.at((x, y - 1, z)) and (x, y - 1, z) not in cells and y - 1 < 0):
-            grounded.add(p)
-            q.append(p)
+        # seeds: blocks touching solid ground (seabed, terrace earth, grade) the model does not replace
+        for dx, dy, dz in N6:
+            n = (x + dx, y + dy, z + dz)
+            if n not in m.cells and s.ground(*n) in ("grass_block", "dirt"):
+                grounded.add(p)
+                q.append(p)
+                break
     def links(p):
         x, y, z = p
         out = [(x + dx, y + dy, z + dz) for dx, dy, dz in N6]
@@ -138,9 +163,19 @@ def run_checks(b):
             if n in cells and n not in grounded and cells[n].key != "water":
                 grounded.add(n)
                 q.append(n)
-    floating = [list(p) for p, c in cells.items() if p not in grounded and c.key != "water"]
+    floating = [list(p) for p, c in cells.items() if p not in grounded and c.key != "water" and c.tag != "afloat"]
     if floating:
         add(out, "error", "floating", f"{len(floating)} blocks are not connected to the ground", floating)
+
+    # -- sand and gravel fall unless something solid is under them
+    falls = []
+    for p, c in cells.items():
+        if c.key in GRAVITY:
+            a = s.at((p[0], p[1] - 1, p[2]))
+            if a is None or a[2].get("walk"):
+                falls.append(list(p))
+    if falls:
+        add(out, "error", "gravity", f"{len(falls)} sand/gravel blocks have nothing solid under them", falls)
 
     # -- supports (and the support exists by the same step)
     bad, late = [], []
@@ -317,9 +352,13 @@ def reachable(s, b):
                     if s.can_stand((nx, yy, nz)):
                         nxt.append((nx, yy, nz))
                         break
-            # jump up one block (not onto fences/walls), needs head room
-            if s.can_stand((nx, y + 1, nz)) and s.walk((x, y + 2, z)) and not tall((nx, y, nz)):
-                nxt.append((nx, y + 1, nz))
+            # step up one block: onto stairs/slabs you just walk, anything else needs jump head room;
+            # fences and walls are too tall
+            if s.can_stand((nx, y + 1, nz)) and not tall((nx, y, nz)):
+                below = s.at((nx, y, nz))
+                stepped = below is not None and block(below[0])["shape"] in ("stair", "slab")
+                if stepped or s.walk((x, y + 2, z)):
+                    nxt.append((nx, y + 1, nz))
         if (s.climb((x, y, z)) or s.climb((x, y - 1, z))) and s.can_stand((x, y + 1, z)):
             nxt.append((x, y + 1, z))
         if s.can_stand((x, y - 1, z)) and (s.climb((x, y - 1, z)) or s.climb((x, y - 2, z))):
@@ -337,7 +376,8 @@ def counts(b):
     cells = {p: c for p, c in b.model.cells.items() if c.key != "air"}
     hidden = []
     for p, c in cells.items():
-        if p[1] >= 0 or not c.flags.get("opaque"):   # only buried full blocks count as fill
+        # only full blocks buried below the local ground (grade or terrace) count as hidden fill
+        if not c.flags.get("opaque") or p[1] >= b.grade_at(p[0], p[2]):
             continue
         x, y, z = p
         exposed = False
@@ -410,8 +450,13 @@ def validate_export(b, facing, files, meta, world, derived, bstr):
             for z in range(z1, z2 + 1):
                 rx, _, rz = rel(b, facing, x, 0, z)
                 for y in range(k["y"][0], k["y"][1] + 1):
-                    if k["what"] == "water" and -k["depth"] <= y <= -1:
+                    surf = k["surface"]
+                    if k["what"] == "water" and surf - k["depth"] < y <= surf:
                         v = "minecraft:water[liquid_depth=0]"
+                    elif k["what"] == "water" and y <= surf - k["depth"]:
+                        v = "minecraft:dirt"
+                    elif k["what"] == "water":
+                        v = "minecraft:air"
                     elif k["what"] != "water" and y in (0, 1):
                         v = "minecraft:mossy_cobblestone"       # stand-in for "whatever is there"
                     else:
@@ -437,18 +482,18 @@ def validate_export(b, facing, files, meta, world, derived, bstr):
     for p, v in expect.items():
         if w.get(p) != v:
             mismatch.append([p[0] - ox, p[1] - oy, p[2] - oz, w.get(p), v])
-    for (x1, z1, x2, z2) in site_rects(b, facing):
+    for (x1, z1, x2, z2), g in site_rects(b, facing):
         for x in range(x1, x2 + 1):
             for z in range(z1, z2 + 1):
-                for y in range(0, meta["clear_top"] + 1):
+                for y in range(g, meta["clear_top"] + 1):
                     p = (ox + x, oy + y, oz + z)
                     if p not in expect and w.get(p) != "minecraft:air":
                         extra.append([x, y, z, w.get(p)])
-                for y in range(-3, 0):
+                for y in range(g - 3, g):
                     p = (ox + x, oy + y, oz + z)
                     if p not in expect and w.get(p).split("[")[0] in ("minecraft:air", "minecraft:water"):
                         extra.append([x, y, z, "hole: " + w.get(p)])
-    touched = [list(p) for p, v in keep_cells.items() if w.get(p) != v]
+    touched = [list(p) for p, v in keep_cells.items() if w.get(p) != v and p not in expect]
     if mismatch:
         add(out, "error", "replay", f"[{facing}] {len(mismatch)} cells differ from the model after replay", mismatch)
     if extra:

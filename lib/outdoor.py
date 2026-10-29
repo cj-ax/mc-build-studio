@@ -153,7 +153,7 @@ def fence_ring(m, x1, z1, x2, z2, y=0, key="oak_fence", gates=(), gate="oak_fenc
                 m.put(x, y, z, key)
 
 
-def crop_bed(m, x1, z1, x2, z2, crop="wheat", water_rows=None, age=7, rim=None):
+def crop_bed(m, x1, z1, x2, z2, crop="wheat", water_rows=None, age=7, rim=None, y=0):
     """Farmland at grade with crops on top and a water channel (keeps it hydrated).
 
     water_rows: z (or x, if the bed is taller than wide) indices of water channels;
@@ -166,35 +166,35 @@ def crop_bed(m, x1, z1, x2, z2, crop="wheat", water_rows=None, age=7, rim=None):
         for z in range(z1, z2 + 1):
             row = z if wide else x
             if row in water_rows:
-                m.put(x, -1, z, "water")
+                m.put(x, y - 1, z, "water")
             else:
-                m.put(x, -1, z, "farmland")
-                m.put(x, 0, z, crop, age=age)
+                m.put(x, y - 1, z, "farmland")
+                m.put(x, y, z, crop, age=age)
     if rim:
         for x in range(x1 - 1, x2 + 2):
             for z in range(z1 - 1, z2 + 2):
                 if x in (x1 - 1, x2 + 1) or z in (z1 - 1, z2 + 1):
-                    m.put(x, -1, z, rim)
+                    m.put(x, y - 1, z, rim)
 
 
 TALL = {"lilac", "rose_bush", "peony", "sunflower", "tall_grass", "large_fern"}
 
 
 def flower_bed(m, x1, z1, x2, z2, flowers=("poppy", "dandelion", "cornflower", "oxeye_daisy"),
-               density=0.8, seed=3, soil="grass_block"):
+               density=0.8, seed=3, soil="grass_block", y=0):
     """Flowers on grass. soil: block written under each flower so it always has soil."""
     r = random.Random(seed)
     for x in range(x1, x2 + 1):
         for z in range(z1, z2 + 1):
-            if r.random() > density or not m.empty(x, 0, z):
+            if r.random() > density or not m.empty(x, y, z) or not m.empty(x, y + 1, z):
                 continue
             f = r.choice(flowers)
             if soil:
-                m.put(x, -1, z, soil)
+                m.put(x, y - 1, z, soil)
             if f in TALL:
-                m.tall_plant(x, 0, z, f)
+                m.tall_plant(x, y, z, f)
             else:
-                m.put(x, 0, z, f)
+                m.put(x, y, z, f)
 
 
 def lamp_post(m, x, y, z, height=3, post="oak_fence", lantern="lantern", base=None):

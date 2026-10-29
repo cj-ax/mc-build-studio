@@ -1,14 +1,44 @@
 {
   "terrain": {
     "grade": 64,
-    "sea_level": 62,
-    "bounds": [-64, -64, 63, 63],
+    "sea_level": 63,
+    "bounds": [
+      -64,
+      -96,
+      232,
+      160
+    ],
     "decor": 0.05,
     "water": [
-      {"name": "lake", "rect": [24, -56, 58, -24], "surface": 62, "depth": 4}
+      {
+        "name": "harbour (preview only)",
+        "rect": [
+          14,
+          -96,
+          232,
+          -13
+        ],
+        "surface": 63,
+        "depth": 7
+      }
     ]
   },
   "builds": [
-    {"name": "cottage", "pos": [-14, -14], "facing": "north"}
+    {
+      "name": "cottage",
+      "pos": [
+        -14,
+        -14
+      ],
+      "facing": "north"
+    },
+    {
+      "name": "outport",
+      "pos": [
+        27,
+        24
+      ],
+      "facing": "north"
+    }
   ]
 }

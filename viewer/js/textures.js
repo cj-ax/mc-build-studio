@@ -100,6 +100,13 @@
         }
       }
     },
+    clapboard(put, c, R) {   // painted horizontal siding: 4 px boards with a shadow line under each lap
+      for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+        const r = y % 4;
+        const f = r === 3 ? 0.72 : r === 0 ? 1.08 : 1;
+        put(x, y, mul(c[0], f * (0.97 + R() * 0.05)));
+      }
+    },
     bark(put, c, R) {
       const cols = [];
       for (let x = 0; x < T; x++) cols.push(0.82 + R() * 0.3);
