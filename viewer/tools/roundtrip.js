@@ -59,7 +59,8 @@ const modelFile = path.join(ROOT, "out", name, "model.json");
   console.log("rebuilt model has it:", inModel, "| edits merged:", JSON.stringify(m.edits), "| errors:", m.checks.filter((c) => c.level === "error").length);
   const f = m.world && m.world.facing || "north";
   const relx = X - m.marker[0], rely = Y + 1 - m.marker[1], relz = Z - m.marker[2];
-  const allLines = Object.values(m.commands.north.files).flat();
+  const cmds = JSON.parse(fs.readFileSync(path.join(ROOT, "out", name, "commands.json"), "utf8"));
+  const allLines = Object.values(cmds.north).flat();
   console.log("north function places it:", allLines.some((l) => l.includes(`~${relx} ~${rely} ~${relz}`)));
 
   // second block: place, then undo -> must vanish from the edits file

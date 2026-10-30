@@ -84,6 +84,9 @@ main { display: grid; grid-template-columns: 1fr clamp(340px, 31vw, 620px); min-
 #hotbar.on { display: flex; }
 #toast { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); background: rgba(10, 24, 29, 0.94); border: 1px solid var(--accent);
   padding: 6px 14px; border-radius: 999px; z-index: 20; display: none; font-size: 13px; }
+#perf { position: absolute; left: 12px; top: 12px; z-index: 30; display: none; background: rgba(10, 24, 29, 0.9); border: 1px solid var(--line2);
+  border-radius: 6px; padding: 7px 10px; font: 12px/1.45 var(--mono); color: var(--ink); white-space: pre; pointer-events: none; }
+#perf.on { display: block; }
 
 /* ---------- side panel */
 #side { background: var(--bg); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -165,6 +168,8 @@ body.noui main { grid-template-columns: 1fr; }
 <div id="bar">
   <span class="lbl">Light</span>
   <div class="seg" id="times"><button data-time="day">Day</button><button data-time="sunset">Sunset</button><button data-time="night">Night</button></div>
+  <span class="lbl">Shadows</span>
+  <div class="seg" id="shadowq"><button data-q="low" title="2048 shadow map">Low</button><button data-q="high" title="4096 shadow map">High</button></div>
   <span class="lbl" id="faces-lbl">Faces</span>
   <div class="seg" id="faces"><button data-f="south">S</button><button data-f="west">W</button><button data-f="north">N</button><button data-f="east">E</button></div>
   <span class="lbl">Mode</span>
@@ -192,13 +197,14 @@ body.noui main { grid-template-columns: 1fr; }
       <div id="segs"></div>
     </div>
     <div id="toast"></div>
+    <div id="perf"></div>
   </section>
   <aside id="side"><nav id="tabs"></nav><div id="pane"></div></aside>
 </main>
 <div id="help">
   <b>Camera</b><br>
   Drag (left or right mouse) to look · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> up · <kbd>Shift</kbd> down ·
-  wheel: speed · <kbd>F</kbd> frame<br><br>
+  wheel: speed · <kbd>F</kbd> frame · <kbd>P</kbd> performance overlay<br><br>
   <b>World</b>: click a build to open it.<br>
   <b>Build</b>: <kbd>[</kbd> <kbd>]</kbd> step · <kbd>,</kbd> <kbd>.</kbd> cut height · <kbd>M</kbd> measure · <kbd>L</kbd> labels · <kbd>X</kbd> x-ray ground<br>
   <b>Edit</b>: left click break · right click place · middle click pick · <kbd>E</kbd> block picker · <kbd>1</kbd>-<kbd>9</kbd> hotbar ·

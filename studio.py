@@ -80,11 +80,14 @@ def compile_build(name, quiet=False):
         counts=cnt, checks=checks, edits=b.edit_log, book=b.book, grades=b.grade_rects(),
         height=max([y for (_, y, _), c in b.model.cells.items() if c.key != "air"] + [0]) + 1, pack_version=".".join(map(str, ver)),
         mcpack=str(mcpack.relative_to(ROOT)), world=world_entry,
-        commands={f: dict(files=sets[f][0], run_order=sets[f][1]["run_order"], build_parts=sets[f][1]["build_parts"],
+        # command text lives in commands.json; the viewer loads it when the Commands tab opens
+        commands={f: dict(sizes={k: sum(1 for ln in v if ln and not ln.startswith("#")) for k, v in sets[f][0].items()},
+                          run_order=sets[f][1]["run_order"], build_parts=sets[f][1]["build_parts"],
                           total=sets[f][1]["total"]) for f in FACINGS},
         install=install_steps(config()), config=config(), built=time.strftime("%Y-%m-%d %H:%M:%S"),
     )
     (out / "model.json").write_text(json.dumps(data, separators=(",", ":")))
+    (out / "commands.json").write_text(json.dumps({f: sets[f][0] for f in FACINGS}, separators=(",", ":")))
     (out / "report.md").write_text(report(b, cnt, checks, ver, mcpack))
     errs = [c for c in checks if c["level"] == "error"]
     warns = [c for c in checks if c["level"] == "warn"]

@@ -2,6 +2,10 @@
 // layers, inventory, commands, setup, areas, secrets, checks) and edit mode (place/break,
 // undo, saved to edits/). Lit with a shadowing sun, sky environment light, haze and baked
 // voxel light (sky/block light + ambient occlusion).
+//
+// Performance model (see CLAUDE.md "Viewer performance"): frames render only on demand; meshes
+// are built once per build in 32x32 column chunks and every vertex carries its step, so step,
+// cut, ghost and x-ray are shader uniforms; edits relight and remesh only nearby chunks.
 (function () {
   const MC = window.MC;
   const EMBED = window.STUDIO_EMBED || null;      // set by the static single-file export
@@ -25,6 +29,7 @@
   const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
     "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const CH = MC.CHUNK, SEC = MC.SECTION;
 
   // light presets. sun direction: elevation / azimuth in degrees (azimuth from north, clockwise)
   const TIMES = {
@@ -35,28 +40,67 @@
     night: { el: 40, az: 200, sun: 0x9db4ff, sunI: 0.3, sky: 0x24345c, ground: 0x0b0c10, hemiI: 0.28, env: 0.16, block: 0xffae55, blockI: 2.4,
       top: 0x03050d, horizon: 0x13204a, fog: 0x0f1a34, exposure: 1.1, disc: 0xdfe6ff, stars: true },
   };
+  const SHADOW_Q = { low: 2048, high: 4096 };
 
   const S = {
     mode: "world", time: "day", step: 0, cut: 99, facing: "north",
-    ghost: true, xray: false, labels: true, tab: null,
-    cells: new Map(), edits: { put: new Map(), remove: new Set() }, undo: [], redo: [],
+    ghost: true, xray: false, labels: true, tab: null, shadowQ: "low",
+    edits: { put: new Map(), remove: new Set() }, undo: [], redo: [],
     hotbar: ["oak_planks", "cobblestone", "spruce_stairs", "spruce_slab", "glass_pane", "lantern", "oak_fence", "poppy", "torch"],
     slot: 0, rot: 0, measure: { on: false, a: null, b: null }, hover: null, keys: new Set(), speed: 12,
     yaw: -Math.PI * 0.75, pitch: -0.45, pos: new THREE.Vector3(0, 20, 0), ready: false,
   };
   window.studio = { S, ready: false };
+  const perf = { remesh: 0, frames: 0, frameMs: 0, fps: 0, calls: 0, tris: 0 };
 
   // ---------------------------------------------------------------- data
+  // static export: gzip + base64 blobs, inflated with DecompressionStream
+  async function inflate(b64) {
+    const bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  }
+  const inflateJSON = async (b64) => JSON.parse(new TextDecoder().decode(await inflate(b64)));
+  // cells: runs along x, columns x y z len variant step group (int32, y/z/group delta-coded) -> flat [x,y,z,v,step,group]
+  async function decodeCells(b64) {
+    const a = new Int32Array(await inflate(b64));
+    const n = a[0], X = 1, Y = 1 + n, Z = 1 + 2 * n, L = 1 + 3 * n, Vv = 1 + 4 * n, St = 1 + 5 * n, Gr = 1 + 6 * n;
+    let total = 0;
+    for (let r = 0; r < n; r++) total += a[L + r];
+    const out = new Int32Array(total * 6);
+    let y = 0, z = 0, g = 0, o = 0;
+    for (let r = 0; r < n; r++) {
+      y += a[Y + r]; z += a[Z + r]; g += a[Gr + r];
+      const x = a[X + r], len = a[L + r], v = a[Vv + r], s = a[St + r];
+      for (let k = 0; k < len; k++) { out[o++] = x + k; out[o++] = y; out[o++] = z; out[o++] = v; out[o++] = s; out[o++] = g; }
+    }
+    return out;
+  }
+  let embedData = null;
+  async function embedded() {
+    if (!embedData) {
+      const j = await inflateJSON(EMBED.data);
+      j.build.cells = await decodeCells(EMBED.cells);
+      embedData = j;
+    }
+    return embedData;
+  }
   const api = {
     async json(url) {
       const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) throw new Error(url + " " + r.status);
       return r.json();
     },
-    palette() { return EMBED ? EMBED.palette : api.json("/blocks/palette.json"); },
-    world() { return EMBED ? EMBED.world : api.json("/out/world.json"); },
-    builds() { return EMBED ? [EMBED.build.name] : api.json("/api/builds"); },
-    build(name) { return EMBED ? EMBED.build : api.json(`/out/${name}/model.json`); },
+    async palette() { return EMBED ? (await embedded()).palette : api.json("/blocks/palette.json"); },
+    world() { return EMBED ? null : api.json("/out/world.json"); },
+    builds() { return EMBED ? [EMBED.name] : api.json("/api/builds"); },
+    async build(name) { return EMBED ? (await embedded()).build : api.json(`/out/${name}/model.json`); },
+    // command text: only fetched / inflated when the Commands tab needs it
+    async commands(name, facing) {
+      if (EMBED) return JSON.parse(new TextDecoder().decode(await inflate(EMBED.commands[facing])));
+      if (!api._cmd || api._cmd.name !== name) api._cmd = { name, all: await api.json(`/out/${name}/commands.json`) };
+      return api._cmd.all[facing];
+    },
     async saveEdits(name, data) {
       if (EMBED) return;
       const r = await fetch(`/api/edits/${name}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
@@ -69,12 +113,14 @@
   // ---------------------------------------------------------------- renderer
   const canvas = $("#gl");
   const stage = $("#stage");
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  const DPR = Math.min(1.5, window.devicePixelRatio || 1);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: DPR <= 1, preserveDrawingBuffer: false });
+  renderer.setPixelRatio(DPR);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xd9e6ec, 100, 600);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 3000);
@@ -82,44 +128,90 @@
   const atlas = new MC.Atlas();
   let pal = null;
 
+  // render on demand: anything that changes the picture calls requestRender()
+  let dirty = true;
+  const requestRender = () => { dirty = true; };
+  // the shadow map re-renders only when geometry, step, cut, facing or time changed; while the cut slider
+  // is being dragged it waits until the drag settles, so each drag frame is one scene pass
+  let shadowDue = 0;
+  const requestShadow = (delay = 0) => {
+    if (delay) shadowDue = performance.now() + delay;
+    else { shadowDue = 0; renderer.shadowMap.needsUpdate = true; }
+    dirty = true;
+  };
+
   const hemi = new THREE.HemisphereLight(0xcfe2f4, 0x8c7d62, 0.5);
   const sun = new THREE.DirectionalLight(0xffffff, 2.6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(SHADOW_Q.low, SHADOW_Q.low);
   sun.shadow.bias = -0.0003;
   sun.shadow.normalBias = 0.035;
   scene.add(hemi, sun, sun.target);
 
-  // voxel material: standard PBR lighting x baked sky occlusion / AO, plus block light and step highlight
+  // Voxel materials. Vertex attributes: light (sky, block, AO), meta (step, cell y, atlas tile).
+  // Steps after uStep are hidden (or ghosted), cells above uCut are cut away; uOpen lets sky in
+  // where the hidden steps / cut / x-ray leave a column open (uSkyTex: top visible opaque y per column).
   const U = {
     uBlock: { value: new THREE.Color(0xffc27a) }, uBlockStr: { value: 0.5 }, uIndoor: { value: 0.22 },
-    uTime: { value: 0 }, uHl: { value: new THREE.Color(0xe08a4c) },
+    uHl: { value: new THREE.Color(0xe08a4c) }, uHlOn: { value: 0 },
+    uStep: { value: 255 }, uCut: { value: 1e4 }, uOpen: { value: 0 },
+    uSkyTex: { value: null }, uSkyBox: { value: new THREE.Vector4(0, 0, 1, 1) }, uSkyY0: { value: 0 },
   };
-  function voxelMat(params) {
-    const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.93, metalness: 0 }, params));
+  const TILE = `vec2(${atlas.cols}.0, ${atlas.rows}.0)`;
+  function voxel(m, kind) {
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, U);
+      // ghosts: only the later steps; caps: only the cut layer
+      const hide = kind === "ghost" ? "meta.x < uStep + 0.5 || meta.y > uCut + 0.5" :
+        kind.startsWith("cap") ? "meta.x > uStep + 0.5 || abs(meta.y - uCut) > 0.5" : "meta.x > uStep + 0.5 || meta.y > uCut + 0.5";
       sh.vertexShader = sh.vertexShader
-        .replace("#include <common>", "#include <common>\nattribute vec3 light; attribute float hl; varying vec3 vVox; varying float vHl;")
-        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvVox = light; vHl = hl;");
-      sh.fragmentShader = sh.fragmentShader
-        .replace("#include <common>", "#include <common>\nuniform vec3 uBlock; uniform float uBlockStr; uniform float uIndoor; uniform float uTime; uniform vec3 uHl; varying vec3 vVox; varying float vHl;")
-        .replace("#include <opaque_fragment>", `
+        .replace("#include <common>", `#include <common>
+          attribute vec3 light; attribute vec3 meta; uniform float uStep; uniform float uCut;
+          varying vec3 vVox; varying float vStep; varying vec2 vSt; varying vec2 vTile; varying vec3 vFront;`)
+        .replace("#include <begin_vertex>", `#include <begin_vertex>
+          vVox = light; vStep = meta.x; vSt = uv; vTile = vec2(mod(meta.z, ${TILE}.x), floor(meta.z / ${TILE}.x)) / ${TILE};
+          vFront = position + normal * 0.5;`)
+        .replace("#include <project_vertex>", `#include <project_vertex>
+          if (${hide}) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);`);
+      let fs = sh.fragmentShader
+        .replace("#include <common>", `#include <common>
+          uniform vec3 uBlock; uniform float uBlockStr; uniform float uIndoor; uniform vec3 uHl; uniform float uHlOn; uniform float uStep; uniform float uCut;
+          uniform float uOpen; uniform sampler2D uSkyTex; uniform vec4 uSkyBox; uniform float uSkyY0;
+          varying vec3 vVox; varying float vStep; varying vec2 vSt; varying vec2 vTile; varying vec3 vFront;`)
+        .replace("#include <map_fragment>", `#ifdef USE_MAP
+            vec4 sampledDiffuseColor = texture2D(map, vTile + 0.0005 + fract(vSt) * (1.0 / ${TILE} - 0.001));
+            ${kind === "ghost" || kind === "xray" || kind === "capx" ? "if (sampledDiffuseColor.a < 0.5) discard;   // cutout, before the opacity" : ""}
+            diffuseColor *= sampledDiffuseColor;
+          #endif`);
+      if (kind === "solid" || kind === "cap") fs = fs.replace("#include <opaque_fragment>", `
           float skyL = clamp(vVox.x, 0.0, 1.0), blkL = clamp(vVox.y, 0.0, 1.0);
-          outgoingLight *= vVox.z * mix(uIndoor, 1.0, smoothstep(0.05, 0.85, skyL));
-          outgoingLight += diffuseColor.rgb * uBlock * uBlockStr * blkL * blkL * blkL * blkL * vVox.z;
-          if (vHl > 0.5) {
-            float pulse = 0.5 + 0.5 * sin(uTime * 3.0);
-            outgoingLight = mix(outgoingLight, uHl * (0.75 + 0.35 * pulse), 0.38) + uHl * 0.06;
+          if (uOpen > 0.5) {
+            vec3 cell = floor(vFront);
+            vec2 c = (cell.xz - uSkyBox.xy + 0.5) / uSkyBox.zw;
+            if (c.x >= 0.0 && c.y >= 0.0 && c.x < 1.0 && c.y < 1.0 && cell.y > texture2D(uSkyTex, c).r * 255.0 + uSkyY0 + 0.5) skyL = 1.0;
           }
+          // a face looking into a cut-away cell has nothing left around it to occlude it
+          float ao = floor(vFront.y) > uCut + 0.5 ? 1.0 : vVox.z;
+          outgoingLight *= ao * mix(uIndoor, 1.0, smoothstep(0.05, 0.85, skyL));
+          outgoingLight += diffuseColor.rgb * uBlock * uBlockStr * blkL * blkL * blkL * blkL * ao;
+          if (uHlOn > 0.5 && vStep > 0.5 && abs(vStep - uStep) < 0.5) outgoingLight = mix(outgoingLight, uHl * 0.925, 0.38) + uHl * 0.06;
           #include <opaque_fragment>`);
+      sh.fragmentShader = fs;
     };
+    m.customProgramCacheKey = () => "voxel-" + kind;
     return m;
   }
-  const solidMat = voxelMat({ map: atlas.three(), alphaTest: 0.5 });
-  const waterMat = voxelMat({ color: 0x2f93c8, transparent: true, opacity: 0.7, roughness: 0.08, depthWrite: false, envMapIntensity: 0.9 });
-  const ghostMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.17, depthWrite: false, fog: false });
-  const xrayMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.22, depthWrite: false });
+  const atlasTex = atlas.three();
+  const solidMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.93, metalness: 0, map: atlasTex, alphaTest: 0.5 }), "solid");
+  const waterMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.08, metalness: 0, color: 0x2f93c8, transparent: true, opacity: 0.7,
+    depthWrite: false, envMapIntensity: 0.9 }), "solid");
+  const ghostMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.17, depthWrite: false, fog: false }), "ghost");
+  const xrayMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.22, depthWrite: false }), "xray");
+  const capMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.93, metalness: 0, map: atlasTex, alphaTest: 0.5 }), "cap");
+  const capXrayMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.22, depthWrite: false }), "capx");
+  const capWaterMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.08, metalness: 0, color: 0x2f93c8, transparent: true, opacity: 0.7,
+    depthWrite: false, envMapIntensity: 0.9 }), "cap");
+  const depthMat = voxel(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), "depth");
   const beamMat = new THREE.MeshBasicMaterial({ color: 0xd8fbff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending,
     depthWrite: false, fog: false, toneMapped: false });
 
@@ -128,7 +220,6 @@
   const inner = new THREE.Group();
   root.add(inner);
   scene.add(root);
-  const meshes = { solid: null, water: null, ghost: null, xray: null };
   const beams = new THREE.Group();
   inner.add(beams);
   function setRoot(turns, pivot) {
@@ -137,12 +228,13 @@
     root.rotation.y = -turns * Math.PI / 2;
     root.updateMatrixWorld(true);
     S.turns = turns;
+    requestShadow();
   }
   const toWorld = (x, y, z) => inner.localToWorld(new THREE.Vector3(x, y, z));
+  const invInner = new THREE.Matrix4();
   function localRay(o, d) {
-    inner.updateMatrixWorld(true);
-    const inv = new THREE.Matrix4().copy(inner.matrixWorld).invert();
-    return { o: o.clone().applyMatrix4(inv), d: d.clone().transformDirection(inv) };
+    invInner.copy(inner.matrixWorld).invert();
+    return { o: o.clone().applyMatrix4(invInner), d: d.clone().transformDirection(invInner) };
   }
 
   // hover outline, measure line, area box, marker, check marks
@@ -221,13 +313,25 @@
     scene.fog.color.set(T.fog);
     hemi.color.set(T.sky); hemi.groundColor.set(T.ground); hemi.intensity = T.hemiI;
     sun.color.set(T.sun); sun.intensity = T.sunI;
-    solidMat.envMapIntensity = T.env;
+    solidMat.envMapIntensity = capMat.envMapIntensity = T.env;
     U.uBlock.value.set(T.block); U.uBlockStr.value = T.blockI;
     renderer.toneMappingExposure = T.exposure;
     disc.material.color.set(T.disc);
+    disc.position.copy(sunDir(T)).multiplyScalar(1200);
+    disc.lookAt(0, 0, 0);
     stars.visible = !!T.stars;
     fitShadow();
     document.querySelectorAll("#times button").forEach((b) => b.classList.toggle("on", b.dataset.time === t));
+  }
+  function setShadowQuality(q) {
+    S.shadowQ = q;
+    const n = SHADOW_Q[q];
+    if (sun.shadow.mapSize.x !== n) {
+      sun.shadow.mapSize.set(n, n);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    }
+    document.querySelectorAll("#shadowq button").forEach((b) => b.classList.toggle("on", b.dataset.q === q));
+    requestShadow();
   }
 
   let shadowBox = null;   // world-space [min, max]
@@ -244,7 +348,7 @@
     const cam = sun.shadow.camera;
     cam.left = -R; cam.right = R; cam.top = R; cam.bottom = -R; cam.near = 0.5; cam.far = R * 5;
     cam.updateProjectionMatrix();
-    sun.shadow.needsUpdate = true;
+    requestShadow();
   }
 
   function resize() {
@@ -252,69 +356,196 @@
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    requestRender();
   }
   new ResizeObserver(resize).observe(stage);
 
-  // ---------------------------------------------------------------- volumes & meshes
-  let vol = null;
-  function clearMeshes() {
-    for (const k of Object.keys(meshes)) if (meshes[k]) { inner.remove(meshes[k]); meshes[k].geometry.dispose(); meshes[k] = null; }
-    beams.clear();
+  // ---------------------------------------------------------------- the volume and its chunk meshes
+  // G.vol.ids: what is drawn (build cell over terrain); G.bid: build cell (variant + 1, air included);
+  // G.tid: terrain under it. Column maps (index z * sx + x): top/bottom build y, build cell count, top of anything.
+  const G = { vol: null, light: null, bid: null, tid: null, chunks: [], cw: 0, cd: 0, beacons: [],
+    skyTex: null, skyData: null, colTop: null, colBot: null, colCnt: null, colAny: null };
+  let vol = null;   // = G.vol, for the raycasts
+
+  function dropMeshes(list) {
+    const geos = new Set();
+    for (const m of list) { inner.remove(m); geos.add(m.geometry); }
+    for (const g of geos) g.dispose();
   }
-  function setMeshes(geo, ghostCells, xrayCells) {
-    clearMeshes();
-    meshes.solid = new THREE.Mesh(geo.solid, solidMat);
-    meshes.solid.castShadow = meshes.solid.receiveShadow = true;
-    meshes.water = new THREE.Mesh(geo.water, waterMat);
-    meshes.water.receiveShadow = true;
-    meshes.water.renderOrder = 2;
-    inner.add(meshes.solid, meshes.water);
-    if (ghostCells && ghostCells.length) {
-      meshes.ghost = new THREE.Mesh(MC.ghostMesh(ghostCells, pal), ghostMat);
-      meshes.ghost.renderOrder = 3;
-      inner.add(meshes.ghost);
+  function clearVolume() {
+    for (const ch of G.chunks) dropMeshes(ch.meshes);
+    G.chunks = [];
+    beams.clear();
+    G.beacons = [];
+  }
+  function addMesh(list, geo, mat, o) {
+    const m = new THREE.Mesh(geo, mat);
+    Object.assign(m, o);
+    m.matrixAutoUpdate = false;
+    inner.add(m);
+    list.push(m);
+    return m;
+  }
+  function meshChunk(ch) {
+    dropMeshes(ch.meshes);
+    ch.meshes = [];
+    const bm = S.mode !== "world";
+    const g = MC.meshChunk(G.vol, pal, G.light, ch.x1, ch.z1, ch.x2, ch.z2, { under: bm, caps: bm, y1: ch.y1, y2: ch.y2 });
+    ch.minStep = g.minStep; ch.maxStep = g.maxStep;
+    ch.solid = ch.ghost = ch.terrain = ch.under = ch.water = ch.behind = ch.bterrain = ch.capS = ch.capT = ch.capW = null;
+    if (g.solid) {
+      ch.solid = addMesh(ch.meshes, g.solid, solidMat, { castShadow: true, receiveShadow: true, customDepthMaterial: depthMat });
+      ch.ghost = addMesh(ch.meshes, g.solid, ghostMat, { renderOrder: 3 });
     }
-    if (xrayCells && xrayCells.length) {
-      meshes.xray = new THREE.Mesh(MC.ghostMesh(xrayCells, pal), xrayMat);
-      meshes.xray.renderOrder = 4;
-      inner.add(meshes.xray);
+    if (g.terrain) ch.terrain = addMesh(ch.meshes, g.terrain, solidMat, { castShadow: true, receiveShadow: true, customDepthMaterial: depthMat });
+    if (g.under) ch.under = addMesh(ch.meshes, g.under, solidMat, { receiveShadow: true });
+    if (g.water) ch.water = addMesh(ch.meshes, g.water, waterMat, { receiveShadow: true, renderOrder: 2 });
+    if (g.behind) ch.behind = addMesh(ch.meshes, g.behind, solidMat, { castShadow: true, receiveShadow: true, customDepthMaterial: depthMat });
+    if (g.bterrain) ch.bterrain = addMesh(ch.meshes, g.bterrain, solidMat, { castShadow: true, receiveShadow: true, customDepthMaterial: depthMat });
+    // cut caps for every layer; the shader shows only the one at the cut
+    if (g.capS) ch.capS = addMesh(ch.meshes, g.capS, capMat, { receiveShadow: true });
+    if (g.capT) ch.capT = addMesh(ch.meshes, g.capT, capMat, { receiveShadow: true });
+    if (g.capW) ch.capW = addMesh(ch.meshes, g.capW, capWaterMat, { receiveShadow: true, renderOrder: 2 });
+  }
+  // chunks: 32 x 32 columns, cut into 16-layer sections so an edit remeshes only what it touches
+  function meshAll() {
+    const t = performance.now(), v = G.vol;
+    G.cw = Math.ceil(v.sx / CH); G.cd = Math.ceil(v.sz / CH); G.ch = Math.ceil(v.sy / SEC);
+    G.chunks = [];
+    for (let cy = 0; cy < G.ch; cy++) for (let cz = 0; cz < G.cd; cz++) for (let cx = 0; cx < G.cw; cx++) {
+      const x1 = v.x0 + cx * CH, z1 = v.z0 + cz * CH, y1 = v.y0 + cy * SEC;
+      const ch = { cx, cz, cy, x1, z1, y1, x2: Math.min(x1 + CH, v.x0 + v.sx) - 1, z2: Math.min(z1 + CH, v.z0 + v.sz) - 1,
+        y2: Math.min(y1 + SEC, v.y0 + v.sy) - 1, meshes: [] };
+      meshChunk(ch);
+      G.chunks.push(ch);
     }
-    // beacon beams
-    const bk = pal.variants.filter((v) => v.key === "beacon").map((v) => v.id);
-    if (bk.length) {
-      for (let i = 0; i < vol.ids.length; i++) {
-        if (!bk.includes(vol.ids[i] - 1)) continue;
-        const x = (i % vol.sx) + vol.x0, z = (((i / vol.sx) | 0) % vol.sz) + vol.z0, y = ((i / (vol.sx * vol.sz)) | 0) + vol.y0;
-        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 400, 10, 1, true), beamMat);
-        b.position.set(x + 0.5, y + 1 + 200, z + 0.5);
-        beams.add(b);
+    perf.remesh = performance.now() - t;
+    perf.remeshChunks = G.chunks.length;
+  }
+  // top visible opaque cell per column under the current step / cut / x-ray (feeds uOpen)
+  function updateSkyTex() {
+    const v = G.vol, { sx, sz, sy } = v, layer = sx * sz;
+    if (!G.skyData || G.skyData.length !== layer) {
+      if (G.skyTex) G.skyTex.dispose();
+      G.skyData = new Uint8Array(layer);
+      G.skyTex = new THREE.DataTexture(G.skyData, sx, sz, THREE.RedFormat, THREE.UnsignedByteType);
+      G.skyTex.magFilter = G.skyTex.minFilter = THREE.NearestFilter;
+      G.skyTex.unpackAlignment = 1;   // rows are sx bytes, not a multiple of 4
+      U.uSkyTex.value = G.skyTex;
+    }
+    U.uSkyBox.value.set(v.x0, v.z0, sx, sz);
+    U.uSkyY0.value = v.y0 - 1;
+    const opq = pal.table().opq, ids = v.ids, stp = v.step, st = S.step, xr = S.xray, D = G.skyData;
+    const yCut = (S.cut < S.bounds.y2 ? S.cut : 1e4) - v.y0;
+    for (let c = 0; c < layer; c++) {
+      let t = 0;
+      const lo = xr ? G.colBot[c] - v.y0 : 0;
+      for (let y = Math.min(yCut, G.colAny[c] - v.y0); y >= lo; y--) {
+        const i = y * layer + c;
+        if (opq[ids[i]]) { const s = stp[i]; if (s === 0 ? !xr : s <= st) { t = y + 1; break; } }
       }
+      D[c] = t;
+    }
+    G.skyTex.needsUpdate = true;
+  }
+  const inBuild = () => S.mode !== "world" && !!S.b;
+  // step / cut / ghost / x-ray are uniforms and visibility flags: nothing is remeshed
+  function applyView() {
+    const b = inBuild(), N = b ? S.b.steps.length : 0;
+    const st = b ? S.step : 255;
+    U.uStep.value = st;
+    U.uCut.value = b && S.cut < S.bounds.y2 ? S.cut : 1e4;
+    U.uHlOn.value = b ? 1 : 0;
+    const open = b && (S.step < N || S.cut < S.bounds.y2 || S.xray);
+    U.uOpen.value = open ? 1 : 0;
+    const t0 = performance.now();
+    if (open) updateSkyTex();
+    const t1 = performance.now();
+    perf.view = { sky: t1 - t0 };
+    // faces only a later step hides: needed while that step is hidden or the cut opens them
+    const exposed = b && (S.step < N || S.cut < S.bounds.y2);
+    const terr = (m) => { m.material = S.xray && b ? xrayMat : solidMat; m.castShadow = !(S.xray && b); m.renderOrder = S.xray && b ? 4 : 0; };
+    for (const ch of G.chunks) {
+      if (ch.solid) ch.solid.visible = ch.minStep <= st;
+      if (ch.ghost) ch.ghost.visible = b && S.ghost && ch.maxStep > st;
+      if (ch.terrain) terr(ch.terrain);
+      if (ch.under) ch.under.visible = b && S.xray;
+      if (ch.behind) ch.behind.visible = exposed && ch.minStep <= st;
+      if (ch.bterrain) { terr(ch.bterrain); ch.bterrain.visible = exposed; }
+      const cutOn = b && S.cut < S.bounds.y2;
+      if (ch.capS) ch.capS.visible = cutOn && ch.minStep <= st;
+      if (ch.capW) ch.capW.visible = cutOn;
+      if (ch.capT) { ch.capT.visible = cutOn; ch.capT.material = S.xray ? capXrayMat : capMat; ch.capT.renderOrder = S.xray ? 4 : 0; }
+    }
+    for (const bc of G.beacons) bc.mesh.visible = (!b || bc.step <= S.step) && bc.y <= U.uCut.value;
+    requestShadow(dragging ? 150 : 0);
+  }
+  // is volume cell j (at height y) visible now? (picking, label occlusion)
+  function shown(j, y) {
+    if (!inBuild()) return true;
+    if (y > S.cut) return false;
+    const s = G.vol.step[j];
+    return s === 0 ? !S.xray : s <= S.step;
+  }
+
+  function findBeacons() {
+    beams.clear();
+    G.beacons = [];
+    const bk = new Set(pal.variants.filter((v) => v.key === "beacon").map((v) => v.id + 1));
+    if (!bk.size) return;
+    const v = G.vol, layer = v.sx * v.sz;
+    for (let i = 0; i < v.n; i++) {
+      if (!bk.has(v.ids[i])) continue;
+      const x = (i % v.sx) + v.x0, z = (((i / v.sx) | 0) % v.sz) + v.z0, y = ((i / layer) | 0) + v.y0;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 400, 10, 1, true), beamMat);
+      m.position.set(x + 0.5, y + 1 + 200, z + 0.5);
+      beams.add(m);
+      G.beacons.push({ y, step: v.step[i], mesh: m });
     }
   }
 
-  // grade: number, or function (x, z) -> y of the grass block
-  function terrainInto(v, x1, z1, x2, z2, grade, water, decorRects, decor) {
-    const gradeAt = typeof grade === "function" ? grade : () => grade;
-    const g = pal.variant("grass_block"), d = pal.variant("dirt"), w = pal.variant("water"), sand = pal.variant("sand");
-    const deco = decor ? ["short_grass", "short_grass", "short_grass", "poppy", "dandelion", "short_grass", "fern"].map((k) => pal.variant(k)) : [];
+  // terrain: grass at gradeAt(x, z), dirt below, keep-zone water, optional decoration
+  function terrainInto(v, tid, x1, z1, x2, z2, gradeAt, water, decorRects, decor) {
+    const g = pal.variant("grass_block") + 1, d = pal.variant("dirt") + 1, w = pal.variant("water") + 1, sand = pal.variant("sand") + 1;
+    const deco = decor ? ["short_grass", "short_grass", "short_grass", "poppy", "dandelion", "short_grass", "fern"].map((k) => pal.variant(k) + 1) : [];
     let seed = 99;
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const put = (x, y, z, id) => { const i = v.at(x, y, z); if (i >= 0) { v.ids[i] = id; if (tid) tid[i] = id; } };
     for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
       let wa = null;
       for (const a of water) if (x >= a.rect[0] && x <= a.rect[2] && z >= a.rect[1] && z <= a.rect[3]) wa = a;
       const gy = gradeAt(x, z);
-      for (let y = Math.min(gy, 0) - 4; y <= gy; y++) v.set(x, y, z, y === gy ? g : d);
+      for (let y = Math.min(gy, 0) - 4; y <= gy; y++) put(x, y, z, y === gy ? g : d);
       if (wa) {
         const surf = wa.surface, bottom = surf - wa.depth + 1;
-        for (let y = bottom; y <= gy; y++) v.clear(x, y, z);
-        for (let y = bottom; y <= surf; y++) v.set(x, y, z, w);
-        v.set(x, bottom - 1, z, sand);
+        for (let y = bottom; y <= gy; y++) put(x, y, z, 0);
+        for (let y = bottom; y <= surf; y++) put(x, y, z, w);
+        put(x, bottom - 1, z, sand);
         continue;
       }
       const r = rnd();
       if (decor && r < decor && !decorRects.some((q) => x >= q[0] - 1 && x <= q[2] + 1 && z >= q[1] - 1 && z <= q[3] + 1))
-        v.set(x, gy + 1, z, deco[(rnd() * deco.length) | 0]);
+        put(x, gy + 1, z, deco[(rnd() * deco.length) | 0]);
     }
+  }
+  // per-column maps from the build cells (and the highest anything, for the sky scan)
+  function columnMaps(cols) {
+    const v = G.vol, layer = v.sx * v.sz, air = pal.table().air;
+    if (!G.colTop || G.colTop.length !== layer) {
+      G.colTop = new Int16Array(layer); G.colBot = new Int16Array(layer); G.colCnt = new Int32Array(layer); G.colAny = new Int16Array(layer);
+    }
+    const one = (c) => {
+      let top = -32768, bot = 32767, cnt = 0, any = v.y0 - 1;
+      for (let y = 0; y < v.sy; y++) {
+        const i = y * layer + c;
+        if (v.ids[i]) any = y + v.y0;
+        const b = G.bid[i];
+        if (b && !air[b]) { cnt++; if (y + v.y0 > top) top = y + v.y0; if (y + v.y0 < bot) bot = y + v.y0; }
+      }
+      G.colTop[c] = top; G.colBot[c] = bot; G.colCnt[c] = cnt; G.colAny[c] = any;
+    };
+    if (cols) for (const c of cols) one(c);
+    else for (let c = 0; c < layer; c++) one(c);
   }
 
   // ---------------------------------------------------------------- world mode
@@ -329,26 +560,37 @@
     for (const b of w.builds) for (const g of b.grades || []) ymax = Math.max(ymax, g.y + 4);
     for (const b of w.builds) for (let i = 1; i < b.cells.length; i += 4) { ymax = Math.max(ymax, b.cells[i] + 3); ymin = Math.min(ymin, b.cells[i] - 2); }
     for (const a of t.water) ymin = Math.min(ymin, a.surface - a.depth - 2);
-    vol = new MC.Vol(x1, ymin, z1, x2 - x1 + 1, ymax - ymin + 1, z2 - z1 + 1);
-    const wg = new Map();
+    clearVolume();
+    const v = (vol = G.vol = new MC.Vol(x1, ymin, z1, x2 - x1 + 1, ymax - ymin + 1, z2 - z1 + 1));
+    G.bid = new Uint16Array(v.n);
+    G.tid = null;
+    const gh = new Int16Array(v.sx * v.sz).fill(t.grade);
     for (const b of w.builds) for (const g of b.grades || [])
-      for (let x = g.rect[0]; x <= g.rect[2]; x++) for (let z = g.rect[1]; z <= g.rect[3]; z++) wg.set(x + "," + z, g.y);
-    terrainInto(vol, x1, z1, x2, z2, (x, z) => { const g = wg.get(x + "," + z); return g == null ? t.grade : g; },
-      t.water, w.builds.map((b) => b.rect), t.decor || 0);
+      for (let x = g.rect[0]; x <= g.rect[2]; x++) for (let z = g.rect[1]; z <= g.rect[3]; z++)
+        if (v.inside(x, v.y0, z)) gh[(z - v.z0) * v.sx + (x - v.x0)] = g.y;
+    terrainInto(v, null, x1, z1, x2, z2, (x, z) => gh[(z - v.z0) * v.sx + (x - v.x0)], t.water, w.builds.map((b) => b.rect), t.decor || 0);
     const vmap = w.variants.map(([k, p]) => pal.variant(k, p));
     const air = pal.variant("air");
     for (const b of w.builds) {
+      b.top = t.grade + 2;
       for (let i = 0; i < b.cells.length; i += 4) {
-        const vid = vmap[b.cells[i + 3]];
-        if (vid === air) vol.clear(b.cells[i], b.cells[i + 1], b.cells[i + 2]);
-        else vol.set(b.cells[i], b.cells[i + 1], b.cells[i + 2], vid, 1);
+        const vid = vmap[b.cells[i + 3]], j = v.at(b.cells[i], b.cells[i + 1], b.cells[i + 2]);
+        if (j < 0) continue;
+        if (vid === air) { v.ids[j] = 0; v.step[j] = 0; }
+        else { v.ids[j] = vid + 1; v.step[j] = 1; G.bid[j] = vid + 1; b.top = Math.max(b.top, b.cells[i + 1]); }
       }
     }
-    setMeshes(MC.mesh(vol, pal, MC.computeLight(vol, pal), {}));
+    const t0 = performance.now();
+    G.light = MC.computeLight(v, pal);
+    meshAll();
+    perf.remesh = performance.now() - t0;
+    findBeacons();
     markerMesh.visible = false;
     areaBox.visible = false;
     fitShadow([new THREE.Vector3(x1, t.grade - 4, z1), new THREE.Vector3(x2 + 1, ymax, z2 + 1)]);
     scene.fog.near = 120; scene.fog.far = 520;
+    applyView();
+    computeAnchors();
     if (!S.keepCamera) { S.lastView = "aerial"; viewPreset("aerial"); }
     S.keepCamera = false;
     syncUI();
@@ -361,11 +603,14 @@
     S.b = b;
     S.book = b.book || {};
     S.mode = mode;
-    S.cells = new Map();
     S.vmap = b.variants.map(([k, p]) => pal.variant(k, p));
-    for (let i = 0; i < b.cells.length; i += 6)
-      S.cells.set(b.cells[i] + "," + b.cells[i + 1] + "," + b.cells[i + 2],
-        { v: S.vmap[b.cells[i + 3]], step: b.cells[i + 4] + 1, group: b.cells[i + 5] });
+    S.cmdFiles = {};
+    // cells with palette variant ids: [x, y, z, variant, step (1..), group] per cell
+    const src = b.cells, cells = new Int32Array(src.length);
+    for (let i = 0; i < src.length; i += 6) {
+      cells[i] = src[i]; cells[i + 1] = src[i + 1]; cells[i + 2] = src[i + 2];
+      cells[i + 3] = S.vmap[src[i + 3]]; cells[i + 4] = src[i + 4] + 1; cells[i + 5] = src[i + 5];
+    }
     if (first) {
       S.step = b.steps.length;
       S.facing = (b.world && b.world.facing) || "north";
@@ -373,26 +618,89 @@
       const ed = await api.editsFile(name).catch(() => ({ put: [], remove: [] }));
       S.edits = { put: new Map((ed.put || []).map((e) => [e.pos.join(","), e])), remove: new Set((ed.remove || []).map((p) => p.join(","))) };
     }
-    S.bounds = boundsOf();
+    buildVolume(cells);
     if (first) S.cut = S.bounds.y2;
     S.step = Math.min(S.step, b.steps.length);
+    S.cut = Math.max(S.bounds.y1, Math.min(S.bounds.y2, S.cut));
     setRoot(FACINGS.indexOf(S.facing), [b.marker[0] + 0.5, b.marker[2] + 0.5]);
-    remesh();
+    placeBuildBits();
+    applyView();
+    const tw = performance.now();
+    warmEdits();
+    perf.warm = performance.now() - tw;
     if (first && !S.keepCamera) { S.lastView = "aerial"; viewPreset("aerial"); }
     S.keepCamera = false;
     syncUI();
   }
 
-  function boundsOf() {
+  function boundsOf(cells) {
     const b = S.b;
     let x1 = Math.min(0, b.marker[0]), z1 = Math.min(0, b.marker[2]), x2 = Math.max(b.footprint[0] - 1, b.marker[0]),
       z2 = Math.max(b.footprint[1] - 1, b.marker[2]), y1 = -1, y2 = 1;
-    for (const k of S.cells.keys()) {
-      const [x, y, z] = k.split(",").map(Number);
-      x1 = Math.min(x1, x); x2 = Math.max(x2, x); z1 = Math.min(z1, z); z2 = Math.max(z2, z);
-      y1 = Math.min(y1, y); y2 = Math.max(y2, y);
+    for (let i = 0; i < cells.length; i += 6) {
+      const x = cells[i], y = cells[i + 1], z = cells[i + 2];
+      if (x < x1) x1 = x; if (x > x2) x2 = x; if (z < z1) z1 = z; if (z > z2) z2 = z; if (y < y1) y1 = y; if (y > y2) y2 = y;
     }
     return { x1, y1, z1, x2, y2, z2 };
+  }
+  // the whole build: volume, terrain, cells, light, chunk meshes, column maps (once per build)
+  function buildVolume(cells) {
+    const t0 = performance.now();
+    const b = S.b;
+    const B = (S.bounds = boundsOf(cells)), m = 6;
+    const x0 = B.x1 - m, z0 = B.z1 - m, y0 = Math.min(B.y1, -4) - 2;
+    clearVolume();
+    const v = (vol = G.vol = new MC.Vol(x0, y0, z0, B.x2 - B.x1 + 1 + 2 * m, B.y2 - y0 + 6, B.z2 - B.z1 + 1 + 2 * m));
+    G.bid = new Uint16Array(v.n);
+    G.tid = new Uint16Array(v.n);
+    const water = b.keep_zones.filter((k) => k.what === "water").map((k) => ({ rect: k.box, surface: k.surface == null ? -1 : k.surface, depth: k.depth }));
+    const gh = new Int16Array(v.sx * v.sz).fill(-1);
+    for (const g of b.grades || []) for (let x = g.box[0]; x <= g.box[2]; x++) for (let z = g.box[1]; z <= g.box[3]; z++)
+      if (v.inside(x, y0, z)) gh[(z - z0) * v.sx + (x - x0)] = g.y - 1;
+    terrainInto(v, G.tid, x0, z0, x0 + v.sx - 1, z0 + v.sz - 1, (x, z) => gh[(z - z0) * v.sx + (x - x0)], water, [], 0);
+    const air = pal.table().air;
+    for (let i = 0; i < cells.length; i += 6) {
+      const j = v.idx(cells[i], cells[i + 1], cells[i + 2]), id = cells[i + 3] + 1;
+      G.bid[j] = id; v.step[j] = cells[i + 4]; v.group[j] = cells[i + 5];
+      v.ids[j] = air[id] ? 0 : id;
+    }
+    const t1 = performance.now();
+    G.light = MC.computeLight(v, pal);
+    const t2 = performance.now();
+    meshAll();
+    const t3 = performance.now();
+    columnMaps();
+    findBeacons();
+    areaInfo();
+    perf.remesh = performance.now() - t0;
+    perf.parts = { fill: t1 - t0, light: t2 - t1, mesh: t3 - t2, maps: performance.now() - t3 };
+  }
+  function placeBuildBits() {
+    const b = S.b, B = S.bounds;
+    markerMesh.visible = true;
+    markerMesh.position.set(b.marker[0] + 0.5, b.marker[1] + 0.03, b.marker[2] + 0.5);
+    fitShadow(worldBox([B.x1 - 3, -4, B.z1 - 3], [B.x2 + 4, B.y2 + 1, B.z2 + 4]));
+    const R = Math.hypot(B.x2 - B.x1, B.z2 - B.z1, B.y2 - B.y1);
+    scene.fog.near = R * 2.2; scene.fog.far = R * 9 + 200;
+    computeAnchors();
+  }
+  // per area: height range and block count, from the column maps (only areas over cols, if given)
+  function areaInfo(cols) {
+    const v = G.vol;
+    if (!cols) S.areaInfo = {};
+    for (const a of S.b.areas) {
+      if (cols && ![...cols].some((c) => { const x = (c % v.sx) + v.x0, z = ((c / v.sx) | 0) + v.z0; return x >= a.box[0] && x <= a.box[2] && z >= a.box[1] && z <= a.box[3]; })) continue;
+      let top = -32768, bot = 32767, n = 0;
+      for (let x = Math.max(a.box[0], v.x0); x <= Math.min(a.box[2], v.x0 + v.sx - 1); x++)
+        for (let z = Math.max(a.box[1], v.z0); z <= Math.min(a.box[3], v.z0 + v.sz - 1); z++) {
+          const c = (z - v.z0) * v.sx + (x - v.x0);
+          if (!G.colCnt[c]) continue;
+          if (G.colTop[c] > top) top = G.colTop[c];
+          if (G.colBot[c] < bot) bot = G.colBot[c];
+          if (!a.ring || x === a.box[0] || x === a.box[2] || z === a.box[1] || z === a.box[3]) n += G.colCnt[c];
+        }
+      S.areaInfo[a.key] = { top, bot, count: n };
+    }
   }
   function levels() {
     const b = S.b, B = S.bounds;
@@ -402,49 +710,6 @@
         ...(b.keep_zones.some((k) => k.what === "water") ? [["Water", -1]] : [])];
     for (const [n, y] of L) out.push([n, y == null ? B.y2 : y]);
     return out;
-  }
-
-  function remesh() {
-    const b = S.b, B = S.bounds, m = 6;
-    const x0 = B.x1 - m, z0 = B.z1 - m, y0 = Math.min(B.y1, -4) - 2;
-    const sx = B.x2 - B.x1 + 1 + 2 * m, sy = B.y2 - y0 + 6, sz = B.z2 - B.z1 + 1 + 2 * m;
-    vol = new MC.Vol(x0, y0, z0, sx, sy, sz);
-    const water = b.keep_zones.filter((k) => k.what === "water").map((k) => ({ rect: k.box, surface: k.surface == null ? -1 : k.surface, depth: k.depth }));
-    const gmap = new Map();
-    for (const g of b.grades || []) for (let x = g.box[0]; x <= g.box[2]; x++) for (let z = g.box[1]; z <= g.box[3]; z++) gmap.set(x + "," + z, g.y - 1);
-    const gfn = (x, z) => { const g = gmap.get(x + "," + z); return g == null ? -1 : g; };
-    const xray = [];
-    const waterId = pal.variant("water"), air = pal.variant("air");
-    if (S.xray) {
-      const tv = new MC.Vol(x0, y0, z0, sx, sy, sz);
-      terrainInto(tv, x0, z0, x0 + sx - 1, z0 + sz - 1, gfn, water, [], 0);
-      for (let i = 0; i < tv.ids.length; i++) {
-        const id = tv.ids[i] - 1;
-        if (id < 0) continue;
-        if (id === waterId) { vol.ids[i] = tv.ids[i]; continue; }
-        const x = (i % sx) + x0, z = (((i / sx) | 0) % sz) + z0, y = ((i / (sx * sz)) | 0) + y0;
-        if (!S.cells.has(x + "," + y + "," + z)) xray.push([x, y, z, id]);
-      }
-    } else terrainInto(vol, x0, z0, x0 + sx - 1, z0 + sz - 1, gfn, water, [], 0);
-    const ghost = [];
-    for (const [k, c] of S.cells) {
-      const [x, y, z] = k.split(",").map(Number);
-      if (y > S.cut) continue;
-      if (c.step <= S.step) {
-        if (c.v === air) vol.clear(x, y, z);
-        else vol.set(x, y, z, c.v, c.step, c.group);
-      } else if (S.ghost && c.v !== air) ghost.push([x, y, z, c.v]);
-    }
-    if (S.cut < B.y2) for (let y = S.cut + 1; y < vol.y0 + vol.sy; y++)
-      for (let z = vol.z0; z < vol.z0 + vol.sz; z++) for (let x = vol.x0; x < vol.x0 + vol.sx; x++) vol.clear(x, y, z);
-    const light = MC.computeLight(vol, pal);
-    setMeshes(MC.mesh(vol, pal, light, { highlightStep: S.step }), ghost, xray);
-    markerMesh.visible = true;
-    markerMesh.position.set(b.marker[0] + 0.5, b.marker[1] + 0.03, b.marker[2] + 0.5);
-    fitShadow(worldBox([B.x1 - 3, -4, B.z1 - 3], [B.x2 + 4, B.y2 + 1, B.z2 + 4]));
-    const R = Math.hypot(B.x2 - B.x1, B.z2 - B.z1, B.y2 - B.y1);
-    scene.fog.near = R * 2.2; scene.fog.far = R * 9 + 200;
-    updateStepUI();
   }
   function worldBox(mn, mx) {
     const a = new THREE.Vector3(Infinity, Infinity, Infinity), b = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
@@ -469,10 +734,12 @@
     S.yaw = worldFixed ? yaw : yaw - ((S.turns || 0) * Math.PI) / 2;
     S.pitch = pitch;
     S.pos.copy(c).addScaledVector(dirVec(), -dist);
+    cameraMoved();
   }
   function viewPreset(name) {
     areaBox.visible = false;
     S.areaOn = null;
+    requestRender();
     if (S.mode === "world" || !S.b) {
       const t = S.world.terrain;
       if (name.startsWith("build:")) {
@@ -501,12 +768,8 @@
   function focusArea(key) {
     const a = S.b.areas.find((q) => q.key === key);
     if (!a) return;
-    let y1 = 0, y2 = 2;
-    for (const k of S.cells.keys()) {
-      const [x, y, z] = k.split(",").map(Number);
-      if (x >= a.box[0] && x <= a.box[2] && z >= a.box[1] && z <= a.box[3]) { y1 = Math.min(y1, y); y2 = Math.max(y2, y); }
-    }
-    y1 = Math.max(y1, -1);
+    const inf = S.areaInfo[key];
+    const y1 = Math.max(Math.min(0, inf.bot), -1), y2 = Math.max(2, inf.top);
     // look from outside the footprint toward its centre, so the area is not hidden behind the rest
     const fx = S.b.footprint[0] / 2, fz = S.b.footprint[1] / 2;
     const ax = (a.box[0] + a.box[2] + 1) / 2, az = (a.box[1] + a.box[3] + 1) / 2;
@@ -523,7 +786,7 @@
     const s = (S.book.secrets || [])[i];
     if (!s) return;
     const [x, y, z] = s.pos;
-    if (y < 0 || s.xray) { S.xray = true; S.cut = y + 1; remesh(); renderPills(); }   // underground: see through, cut down to it
+    if (y < 0 || s.xray) { S.xray = true; S.cut = Math.min(S.bounds.y2, y + 1); applyView(); renderPills(); updateStepUI(); computeAnchors(); }   // underground: see through, cut down to it
     // approach from the nearest outside edge of the footprint
     const dx = S.b.footprint[0] / 2 - (x + 0.5), dz = S.b.footprint[1] / 2 - (z + 0.5);
     const yaw = Math.hypot(dx, dz) > 2 ? Math.atan2(-dx, -dz) : -Math.PI * 0.75;
@@ -541,16 +804,18 @@
   });
   canvas.addEventListener("pointermove", (e) => {
     S.mouse = { x: e.clientX, y: e.clientY };
+    hoverDirty = true;
     if (drag) {
       if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
       if (drag.moved) {
         S.yaw -= (e.movementX || 0) * 0.0045;
         S.pitch = Math.max(-1.55, Math.min(1.55, S.pitch - (e.movementY || 0) * 0.0045));
+        cameraMoved();
       }
     }
   });
   canvas.addEventListener("pointerup", (e) => { if (drag && !drag.moved) click(drag.button, e); drag = null; });
-  canvas.addEventListener("pointerleave", () => { S.mouse = null; outline.visible = false; $("#readout").innerHTML = measureText(); });
+  canvas.addEventListener("pointerleave", () => { S.mouse = null; setHover(null); });
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     S.speed = Math.max(2, Math.min(150, S.speed * (e.deltaY > 0 ? 0.85 : 1.18)));
@@ -566,6 +831,7 @@
     if (k === "f") viewPreset("aerial");
     else if (k === "l") toggle("labels");
     else if (k === "m") toggleMeasure();
+    else if (k === "p") togglePerf();
     else if (k === "x" && S.b) toggle("xray");
     else if (k === "g" && S.b) toggle("ghost");
     else if (k === "h") $("#help").classList.toggle("open");
@@ -582,19 +848,23 @@
   window.addEventListener("keyup", (e) => S.keys.delete(e.code));
   window.addEventListener("blur", () => S.keys.clear());
 
+  const MOVE_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "ShiftLeft", "ShiftRight"];
   function moveCamera(dt) {
-    const f = dirVec(S.yaw, 0), r = new THREE.Vector3(-f.z, 0, f.x), v = new THREE.Vector3();
     const K = S.keys;
+    if (!MOVE_KEYS.some((k) => K.has(k))) return false;
+    const f = dirVec(S.yaw, 0), r = new THREE.Vector3(-f.z, 0, f.x), v = new THREE.Vector3();
     if (K.has("KeyW") || K.has("ArrowUp")) v.add(f);
     if (K.has("KeyS") || K.has("ArrowDown")) v.sub(f);
     if (K.has("KeyD") || K.has("ArrowRight")) v.add(r);
     if (K.has("KeyA") || K.has("ArrowLeft")) v.sub(r);
     if (K.has("Space")) v.y += 1;
     if (K.has("ShiftLeft") || K.has("ShiftRight")) v.y -= 1;
-    if (v.lengthSq()) S.pos.addScaledVector(v.normalize(), S.speed * dt * (K.has("ControlLeft") ? 3 : 1));
-    camera.position.copy(S.pos);
-    camera.rotation.set(S.pitch, S.yaw, 0);
+    if (!v.lengthSq()) return false;
+    S.pos.addScaledVector(v.normalize(), S.speed * dt * (K.has("ControlLeft") ? 3 : 1));
+    return true;
   }
+  let camMoved = true;
+  function cameraMoved() { camMoved = true; hoverDirty = true; requestRender(); }
 
   // ---------------------------------------------------------------- picking
   const ray = new THREE.Raycaster();
@@ -602,14 +872,18 @@
   function pick(mx, my) {
     if (!vol) return null;
     const r = canvas.getBoundingClientRect();
+    camera.position.copy(S.pos);
+    camera.rotation.set(S.pitch, S.yaw, 0);
+    camera.updateMatrixWorld();
     ray.setFromCamera(new THREE.Vector2(((mx - r.left) / r.width) * 2 - 1, -((my - r.top) / r.height) * 2 + 1), camera);
     const lr = localRay(ray.ray.origin, ray.ray.direction);
     lastRay = lr;
-    return MC.raycast(vol, pal, lr.o, lr.d, 600);
+    return MC.raycast(vol, pal, lr.o, lr.d, 600, true, shown);
   }
   function cellInfo(x, y, z) {
-    const id = vol.get(x, y, z);
-    return id >= 0 ? pal.v(id) : null;
+    const j = vol.at(x, y, z);
+    if (j < 0 || !vol.ids[j] || !shown(j, y)) return null;
+    return pal.v(vol.ids[j] - 1);
   }
   function worldOrigin(b) {
     const w = b.world;
@@ -628,25 +902,38 @@
     }
     return { local: [dx, dy, dz], cmd: [rx, dy, rz], abs };
   }
+  // hover: raycast only after the mouse or camera moved; the readout changes only with the block
+  let hoverDirty = false, hoverT = 0, readoutKey = null;
   function updateHover() {
-    const ro = $("#readout");
     if (!S.mouse || (drag && drag.moved)) return;
-    const h = pick(S.mouse.x, S.mouse.y);
+    setHover(pick(S.mouse.x, S.mouse.y));
+  }
+  function setHover(h) {
     S.hover = h;
-    if (!h) { outline.visible = false; ro.innerHTML = measureText(); return; }
-    outline.visible = true;
-    outline.position.set(h.x + 0.5, h.y + 0.5, h.z + 0.5);
+    const key = (h ? `${h.x},${h.y},${h.z}` : "-") + "|" + S.mode + "|" + S.facing + "|" + S.step + "|" + measureText();
+    if (h) {
+      if (!outline.visible || outline.position.x !== h.x + 0.5 || outline.position.y !== h.y + 0.5 || outline.position.z !== h.z + 0.5) {
+        outline.visible = true;
+        outline.position.set(h.x + 0.5, h.y + 0.5, h.z + 0.5);
+        requestRender();
+      }
+    } else if (outline.visible) { outline.visible = false; requestRender(); }
+    if (key === readoutKey) return;
+    readoutKey = key;
+    $("#readout").innerHTML = readoutHTML(h);
+  }
+  function readoutHTML(h) {
+    if (!h) return measureText();
     const v = cellInfo(h.x, h.y, h.z);
     if (S.mode === "world" || !S.b) {
       const bld = buildAt(h.x, h.z);
-      ro.innerHTML = `<b>${v ? v.def.name : ""}</b> &nbsp; X ${h.x} Y ${h.y} Z ${h.z}` + (bld ? `<br>${bld.title}: click to open` : "");
-      return;
+      return `<b>${v ? v.def.name : ""}</b> &nbsp; X ${h.x} Y ${h.y} Z ${h.z}` + (bld ? `<br>${bld.title}: click to open` : "");
     }
     const rc = relCoords(h.x, h.y, h.z);
     const props = v && Object.keys(v.props).length ? " " + Object.entries(v.props).map(([a, b]) => `${a}=${b}`).join(" ") : "";
-    const c = S.cells.get(h.x + "," + h.y + "," + h.z);
-    const step = c ? `${pad2(c.step + 1)} ${S.b.steps[c.step - 1].title}` : "ground";
-    ro.innerHTML = `<b>${v ? v.def.name : "?"}</b><span style="color:var(--dim)">${props}</span><br>` +
+    const j = vol.at(h.x, h.y, h.z), st = j >= 0 && G.bid[j] ? vol.step[j] : 0;
+    const step = st ? `${pad2(st + 1)} ${S.b.steps[st - 1].title}` : "ground";
+    return `<b>${v ? v.def.name : "?"}</b><span style="color:var(--dim)">${props}</span><br>` +
       `from marker <b>${rc.local.join(", ")}</b> (x east, y up, z south)<br>` +
       `command (${S.facing}) <code>~${rc.cmd[0]} ~${rc.cmd[1]} ~${rc.cmd[2]}</code>` +
       (rc.abs ? `<br>world ${rc.abs.join(" ")}` : "") + `<br>step ${step}` + measureText(true);
@@ -659,8 +946,10 @@
   function toggleMeasure() {
     S.measure = { on: !S.measure.on, a: null, b: null };
     measureLine.visible = false;
+    requestRender();
     renderPills();
     toast(S.measure.on ? "Measure: click two blocks" : "Measure off");
+    setHover(S.hover);
   }
   function measureText(br) {
     const M = S.measure;
@@ -680,7 +969,8 @@
       measureLine.geometry.setFromPoints([new THREE.Vector3(M.a[0] + 0.5, M.a[1] + 0.5, M.a[2] + 0.5), new THREE.Vector3(p[0] + 0.5, p[1] + 0.5, p[2] + 0.5)]);
       measureLine.visible = true;
     }
-    updateHover();
+    requestRender();
+    setHover(h);
   }
 
   // ---------------------------------------------------------------- clicks & editing
@@ -704,35 +994,154 @@
   const K3 = (x, y, z) => x + "," + y + "," + z;
   let localGroup = -1;
   function snapshot() { return { put: new Map(S.edits.put), remove: new Set(S.edits.remove) }; }
+  // cell state: b = palette variant + 1 (0 = no build cell), s = step, g = group
+  function stateAt(x, y, z) {
+    const j = vol.at(x, y, z);
+    return j < 0 || !G.bid[j] ? { x, y, z, b: 0, s: 0, g: 0 } : { x, y, z, b: G.bid[j], s: vol.step[j], g: vol.group[j] };
+  }
+  // changes: [{x, y, z, v: variant id or null (remove), step, group}]
   function changeCells(changes, label) {
-    const before = { edits: snapshot(), cells: changes.map(([k]) => [k, S.cells.get(k) || null]) };
-    for (const [k, c] of changes) {
-      const pos = k.split(",").map(Number);
-      if (c) {
-        S.cells.set(k, c);
-        S.edits.put.set(k, { pos, block: pal.v(c.v).key, props: pal.v(c.v).props, step: S.b.steps[c.step - 1].key });
+    const before = { edits: snapshot(), cells: changes.map((c) => stateAt(c.x, c.y, c.z)) };
+    const after = changes.map((c) => (c.v == null ? { x: c.x, y: c.y, z: c.z, b: 0, s: 0, g: 0 } : { x: c.x, y: c.y, z: c.z, b: c.v + 1, s: c.step, g: c.group }));
+    for (const c of changes) {
+      const k = K3(c.x, c.y, c.z);
+      if (c.v != null) {
+        const v = pal.v(c.v);
+        S.edits.put.set(k, { pos: [c.x, c.y, c.z], block: v.key, props: v.props, step: S.b.steps[c.step - 1].key });
       } else {
-        S.cells.delete(k);
         S.edits.put.delete(k);
         S.edits.remove.add(k);
       }
     }
-    S.undo.push({ before, after: { edits: snapshot(), cells: changes }, label });
+    S.undo.push({ before, after: { edits: snapshot(), cells: after }, label });
     S.redo = [];
+    setCells(after);
     commitEdits(label);
   }
   function restore(state) {
     S.edits = { put: new Map(state.edits.put), remove: new Set(state.edits.remove) };
-    for (const [k, c] of state.cells) { if (c) S.cells.set(k, c); else S.cells.delete(k); }
+    setCells(state.cells);
   }
   function undo() { const a = S.undo.pop(); if (!a) return; restore(a.before); S.redo.push(a); commitEdits("undo " + a.label); }
   function redo() { const a = S.redo.pop(); if (!a) return; restore(a.after); S.undo.push(a); commitEdits("redo " + a.label); }
+
+  // the one path for edits, undo and redo: write the cells, relight +-16 blocks around them,
+  // remesh only the chunks whose cells or light changed (plus their border neighbours)
+  function setCells(states) {
+    const t0 = performance.now();
+    const v = G.vol;
+    if (states.some((c) => !v.inside(c.x, c.y, c.z) || c.x < v.x0 + 1 || c.z < v.z0 + 1 || c.x > v.x0 + v.sx - 2 || c.z > v.z0 + v.sz - 2 || c.y > v.y0 + v.sy - 3))
+      return rebuildWith(states, t0);
+    const T = pal.table();
+    const B = S.bounds, cutAll = S.cut >= B.y2;
+    let ex1 = Infinity, ez1 = Infinity, ex2 = -Infinity, ez2 = -Infinity, ey1 = Infinity, ey2 = -Infinity, shrink = false;
+    const cols = new Set();
+    for (const c of states) {
+      const i = v.idx(c.x, c.y, c.z);
+      const had = G.bid[i] && !T.air[G.bid[i]];
+      G.bid[i] = c.b;
+      if (c.b) { v.ids[i] = T.air[c.b] ? 0 : c.b; v.step[i] = c.s; v.group[i] = c.g; }
+      else { v.ids[i] = G.tid[i]; v.step[i] = 0; v.group[i] = 0; }
+      const lx = c.x - v.x0, lz = c.z - v.z0, ly = c.y - v.y0;
+      ex1 = Math.min(ex1, lx); ex2 = Math.max(ex2, lx); ez1 = Math.min(ez1, lz); ez2 = Math.max(ez2, lz);
+      ey1 = Math.min(ey1, ly); ey2 = Math.max(ey2, ly);
+      cols.add(lz * v.sx + lx);
+      if (c.b && !T.air[c.b]) {
+        B.x1 = Math.min(B.x1, c.x); B.x2 = Math.max(B.x2, c.x); B.z1 = Math.min(B.z1, c.z); B.z2 = Math.max(B.z2, c.z);
+        B.y1 = Math.min(B.y1, c.y); B.y2 = Math.max(B.y2, c.y);
+      } else if (had && (c.x === B.x1 || c.x === B.x2 || c.z === B.z1 || c.z === B.z2 || c.y === B.y1 || c.y === B.y2)) shrink = true;
+    }
+    if (shrink) recomputeBounds();
+    if (cutAll) S.cut = S.bounds.y2;
+    // relight, remembering the old light to find what changed
+    const L = G.light, layer = v.sx * v.sz;
+    const rx1 = Math.max(0, ex1 - 16), rx2 = Math.min(v.sx - 1, ex2 + 16), rz1 = Math.max(0, ez1 - 16), rz2 = Math.min(v.sz - 1, ez2 + 16);
+    const rw = rx2 - rx1 + 1, rd = rz2 - rz1 + 1;
+    const old = new Uint8Array(rw * rd * v.sy * 2);
+    let o = 0;
+    for (let y = 0; y < v.sy; y++) for (let z = rz1; z <= rz2; z++) {
+      const i = y * layer + z * v.sx + rx1;
+      old.set(L.sky.subarray(i, i + rw), o); o += rw;
+      old.set(L.blk.subarray(i, i + rw), o); o += rw;
+    }
+    const tl = performance.now();
+    MC.computeLight(v, pal, L, [rx1, rz1, rx2, rz2]);
+    const tl2 = performance.now();
+    let cx1 = ex1, cx2 = ex2, cz1 = ez1, cz2 = ez2, cy1 = ey1, cy2 = ey2;
+    o = 0;
+    for (let y = 0; y < v.sy; y++) for (let z = rz1; z <= rz2; z++) {
+      const i = y * layer + z * v.sx + rx1;
+      for (let k = 0; k < rw; k++) if (L.sky[i + k] !== old[o + k] || L.blk[i + k] !== old[o + rw + k]) {
+        const x = rx1 + k;
+        if (x < cx1) cx1 = x; if (x > cx2) cx2 = x; if (z < cz1) cz1 = z; if (z > cz2) cz2 = z; if (y < cy1) cy1 = y; if (y > cy2) cy2 = y;
+      }
+      o += 2 * rw;
+    }
+    // sections touching the changed box (+1 for neighbours' faces, stair corners, fence links)
+    const qx1 = Math.max(0, Math.floor((cx1 - 1) / CH)), qx2 = Math.min(G.cw - 1, Math.floor((cx2 + 1) / CH));
+    const qz1 = Math.max(0, Math.floor((cz1 - 1) / CH)), qz2 = Math.min(G.cd - 1, Math.floor((cz2 + 1) / CH));
+    const qy1 = Math.max(0, Math.floor((cy1 - 1) / SEC)), qy2 = Math.min(G.ch - 1, Math.floor((cy2 + 1) / SEC));
+    const tm = performance.now();
+    for (let cy = qy1; cy <= qy2; cy++) for (let cz = qz1; cz <= qz2; cz++) for (let cx = qx1; cx <= qx2; cx++)
+      meshChunk(G.chunks[(cy * G.cd + cz) * G.cw + cx]);
+    const tm2 = performance.now();
+    columnMaps(cols);
+    areaInfo(cols);
+    if (states.some((c) => c.b && pal.v(c.b - 1).key === "beacon") || G.beacons.length) findBeacons();
+    applyView();
+    computeAnchors();
+    perf.remesh = performance.now() - t0;
+    perf.remeshChunks = (qx2 - qx1 + 1) * (qz2 - qz1 + 1) * (qy2 - qy1 + 1);
+    perf.parts = { chunks: (qx2 - qx1 + 1) * (qz2 - qz1 + 1) * (qy2 - qy1 + 1), write: tl - t0, relight: tl2 - tl, diff: tm - tl2, mesh: tm2 - tm, rest: performance.now() - tm2 };
+  }
+  // run the edit path once on load (rewrite one cell as it is) so the first real edit is not paying for the JIT
+  function warmEdits() {
+    const v = G.vol, B = S.bounds;
+    const x = Math.round((B.x1 + B.x2) / 2), z = Math.round((B.z1 + B.z2) / 2);
+    const keep = { cut: S.cut, remesh: perf.remesh, parts: perf.parts };
+    for (const [dx, dz] of [[0, 0], [40, 0], [0, 40], [-40, 0]]) setCells([stateAt(x + dx, 0, z + dz)]);
+    // and one real change: a block in the empty top corner of the volume, then gone again
+    const cx = v.x0 + 3, cy = v.y0 + v.sy - 4, cz = v.z0 + 3, was = stateAt(cx, cy, cz);
+    setCells([{ x: cx, y: cy, z: cz, b: pal.variant("stone") + 1, s: 1, g: 0 }]);
+    setCells([was]);
+    S.cut = keep.cut; perf.remesh = keep.remesh; perf.parts = keep.parts; perf.remeshChunks = G.chunks.length;
+  }
+  function recomputeBounds() {
+    const v = G.vol, air = pal.table().air, b = S.b, layer = v.sx * v.sz;
+    let x1 = Math.min(0, b.marker[0]), z1 = Math.min(0, b.marker[2]), x2 = Math.max(b.footprint[0] - 1, b.marker[0]),
+      z2 = Math.max(b.footprint[1] - 1, b.marker[2]), y1 = -1, y2 = 1;
+    for (let i = 0; i < v.n; i++) {
+      const id = G.bid[i];
+      if (!id || air[id]) continue;
+      const x = (i % v.sx) + v.x0, z = (((i / v.sx) | 0) % v.sz) + v.z0, y = ((i / layer) | 0) + v.y0;
+      if (x < x1) x1 = x; if (x > x2) x2 = x; if (z < z1) z1 = z; if (z > z2) z2 = z; if (y < y1) y1 = y; if (y > y2) y2 = y;
+    }
+    Object.assign(S.bounds, { x1, y1, z1, x2, y2, z2 });
+  }
+  // an edit outside the volume: rebuild the volume around the new bounds (rare)
+  function rebuildWith(states, t0) {
+    const v = G.vol, layer = v.sx * v.sz, set = new Map(states.map((c) => [K3(c.x, c.y, c.z), c]));
+    const out = [];
+    for (let i = 0; i < v.n; i++) {
+      if (!G.bid[i]) continue;
+      const x = (i % v.sx) + v.x0, z = (((i / v.sx) | 0) % v.sz) + v.z0, y = ((i / layer) | 0) + v.y0;
+      if (set.has(K3(x, y, z))) continue;
+      out.push(x, y, z, G.bid[i] - 1, v.step[i], v.group[i]);
+    }
+    for (const c of states) if (c.b) out.push(c.x, c.y, c.z, c.b - 1, c.s, c.g);
+    const cutAll = S.cut >= S.bounds.y2;
+    buildVolume(Int32Array.from(out));
+    if (cutAll) S.cut = S.bounds.y2;
+    placeBuildBits();
+    applyView();
+    perf.remesh = performance.now() - t0;
+  }
+
   let saveTimer = null;
+  const EDIT_PANES = ["Edit", "Layers", S.book ? S.book.subject : "Areas", "Areas"];
   function commitEdits(label) {
-    S.bounds = boundsOf();
-    remesh();
     toast(label);
-    syncPane();
+    if (EDIT_PANES.includes(S.tab) || S.tab === (S.book.subject || "Areas")) syncPane();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
       const data = { put: [...S.edits.put.values()], remove: [...S.edits.remove].map((k) => k.split(",").map(Number)) };
@@ -743,16 +1152,22 @@
       } catch (err) { setStatus("save failed: " + err.message); }
     }, 250);
   }
-  function groupCells(k) {
-    const c = S.cells.get(k);
-    if (!c || !c.group) return [k];
-    return [...S.cells.entries()].filter(([, v]) => v.group === c.group).map(([kk]) => kk);
+  // all cells of the multi-cell block at (x, y, z): doors, beds, tall plants (a few blocks apart at most)
+  function groupCells(x, y, z) {
+    const j = vol.at(x, y, z), g = vol.group[j];
+    if (!g) return [[x, y, z]];
+    const out = [];
+    for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const k = vol.at(x + dx, y + dy, z + dz);
+      if (k >= 0 && G.bid[k] && vol.group[k] === g) out.push([x + dx, y + dy, z + dz]);
+    }
+    return out;
   }
   function curStep() { return Math.max(1, Math.min(S.step, S.b.steps.length)); }
   function breakBlock(h) {
-    const k = K3(h.x, h.y, h.z);
-    if (S.cells.has(k)) changeCells(groupCells(k).map((kk) => [kk, null]), "break");
-    else if (h.y < 0) changeCells([[k, { v: pal.variant("air"), step: curStep(), group: 0 }]], "dig");
+    const j = vol.at(h.x, h.y, h.z);
+    if (j >= 0 && G.bid[j]) changeCells(groupCells(h.x, h.y, h.z).map(([x, y, z]) => ({ x, y, z, v: null })), "break");
+    else if (h.y < 0) changeCells([{ x: h.x, y: h.y, z: h.z, v: pal.variant("air"), step: curStep(), group: 0 }], "dig");
   }
   function lookDir() {
     // camera heading turned back into the build's own frame
@@ -790,14 +1205,14 @@
     const changes = [];
     if (def.shape === "door" || def.shape === "tall_plant") {
       if (!free(x, y + 1, z)) return toast("needs two blocks of space");
-      changes.push([K3(x, y, z), { v: pal.variant(key, Object.assign({}, props, { upper: false })), step, group: g }],
-        [K3(x, y + 1, z), { v: pal.variant(key, Object.assign({}, props, { upper: true })), step, group: g }]);
+      changes.push({ x, y, z, v: pal.variant(key, Object.assign({}, props, { upper: false })), step, group: g },
+        { x, y: y + 1, z, v: pal.variant(key, Object.assign({}, props, { upper: true })), step, group: g });
     } else if (def.shape === "bed") {
       const d = MC.DIRV[props.facing];
       if (!free(x + d[0], y, z + d[1])) return toast("needs two blocks of space");
-      changes.push([K3(x, y, z), { v: pal.variant(key, Object.assign({}, props, { head: false })), step, group: g }],
-        [K3(x + d[0], y, z + d[1]), { v: pal.variant(key, Object.assign({}, props, { head: true })), step, group: g }]);
-    } else changes.push([K3(x, y, z), { v: pal.variant(key, props), step, group: 0 }]);
+      changes.push({ x, y, z, v: pal.variant(key, Object.assign({}, props, { head: false })), step, group: g },
+        { x: x + d[0], y, z: z + d[1], v: pal.variant(key, Object.assign({}, props, { head: true })), step, group: g });
+    } else changes.push({ x, y, z, v: pal.variant(key, props), step, group: 0 });
     changeCells(changes, "place " + def.name);
   }
 
@@ -846,11 +1261,32 @@
     clearTimeout(toastT);
     toastT = setTimeout(() => (e.style.display = "none"), 1400);
   }
-  function setStep(s) { if (!S.b) return; S.step = Math.max(0, Math.min(S.b.steps.length, s)); remesh(); syncPane(); }
-  function setCut(c) { if (!S.b) return; S.cut = Math.max(S.bounds.y1, Math.min(S.bounds.y2, c)); remesh(); syncPane(); }
+  const STEP_PANES = ["Steps", "Blocks", "Edit", "Layers"];
+  function setStep(s) {
+    if (!S.b) return;
+    const n = Math.max(0, Math.min(S.b.steps.length, s));
+    if (n === S.step) return;
+    S.step = n;
+    applyView();
+    updateStepUI();
+    if (STEP_PANES.includes(S.tab)) syncPane();
+    readoutKey = null; hoverDirty = true;
+  }
+  function setCut(c) {
+    if (!S.b) return;
+    const n = Math.max(S.bounds.y1, Math.min(S.bounds.y2, c));
+    if (n === S.cut) return;
+    S.cut = n;
+    applyView();
+    updateCutUI();
+    computeAnchors();
+    if (S.tab === "Layers") syncPane();
+    hoverDirty = true;
+  }
   function toggle(what) {
     S[what] = !S[what];
-    if (S.b && S.mode !== "world" && (what === "xray" || what === "ghost")) remesh();
+    if (S.b && S.mode !== "world" && (what === "xray" || what === "ghost")) { applyView(); hoverDirty = true; }
+    if (what === "labels") { computeAnchors(); requestRender(); }
     renderPills();
   }
   function stepTitle(i) { return i === 0 ? "Clear and level the land" : S.b.steps[i - 1].title; }
@@ -865,17 +1301,29 @@
       for (let i = 0; i <= N; i++) segs.append(el("button", { title: `${pad2(i + 1)} ${stepTitle(i)}`, onclick: () => setStep(i) }));
     }
     [...segs.children].forEach((b, i) => { b.className = i === S.step ? "on" : i < S.step ? "done" : ""; });
+    updateCutUI();
+  }
+  let marksKey = null;
+  function updateCutUI() {
     const ct = $("#cut");
-    ct.min = S.bounds.y1; ct.max = S.bounds.y2; ct.value = S.cut;
+    ct.min = S.bounds.y1; ct.max = S.bounds.y2;
+    if (+ct.value !== S.cut) ct.value = S.cut;
+    const L = levels(), key = L.map((l) => l.join(":")).join("|");
     const marks = $("#cut-marks");
-    marks.innerHTML = "";
-    for (const [n, y] of levels()) marks.append(el("button", { class: S.cut === y ? "on" : "", title: `${n}: show up to y=${y}`, onclick: () => setCut(y) }, n));
+    if (key !== marksKey) {
+      marksKey = key;
+      marks.innerHTML = "";
+      for (const [n, y] of L) marks.append(el("button", { "data-y": y, title: `${n}: show up to y=${y}`, onclick: () => setCut(y) }, n));
+    }
+    for (const b of marks.children) b.classList.toggle("on", +b.dataset.y === S.cut);
     $("#cut-label").textContent = S.cut >= S.bounds.y2 ? "all" : `y ${S.cut}`;
   }
-  $("#cut").addEventListener("input", (e) => setCut(+e.target.value));
+  let dragging = false;
+  $("#cut").addEventListener("input", (e) => { dragging = true; setCut(+e.target.value); dragging = false; });
   $("#prev").addEventListener("click", () => setStep(S.step - 1));
   $("#next").addEventListener("click", () => setStep(S.step + 1));
   document.querySelectorAll("#times button").forEach((b) => b.addEventListener("click", () => setTime(b.dataset.time)));
+  document.querySelectorAll("#shadowq button").forEach((b) => b.addEventListener("click", () => setShadowQuality(b.dataset.q)));
   document.querySelectorAll("#faces button").forEach((b) => b.addEventListener("click", () => setFacing(b.dataset.f)));
   document.querySelectorAll("#modes button").forEach((b) => b.addEventListener("click", () => {
     const m = b.dataset.mode;
@@ -886,11 +1334,12 @@
   $("#t-help").addEventListener("click", () => $("#help").classList.toggle("open"));
   $("#build-select").addEventListener("change", (e) => e.target.value && navigate(e.target.value, S.mode === "edit" ? "edit" : "build"));
 
+  // turning the build is a transform of its root group: nothing is remeshed
   function setFacing(f) {
     if (!S.b) return;
     S.facing = f;
     setRoot(FACINGS.indexOf(f), [S.b.marker[0] + 0.5, S.b.marker[2] + 0.5]);
-    remesh();
+    placeBuildBits();
     viewPreset(S.lastView || "aerial");
     syncUI();
   }
@@ -956,10 +1405,10 @@
   window.addEventListener("popstate", () => route());
   async function route(keep) {
     const u = new URL(location.href);
-    const name = u.searchParams.get("build") || (EMBED ? EMBED.build.name : null);
+    const name = u.searchParams.get("build") || (EMBED ? EMBED.name : null);
     const mode = u.searchParams.get("mode") || (name ? "build" : "world");
     if ((!name || mode === "world") && !EMBED) return openWorld();
-    if (keep && S.b && S.b.name === name) { S.mode = mode; syncUI(); remesh(); return; }
+    if (keep && S.b && S.b.name === name) { S.mode = mode; syncUI(); applyView(); return; }
     await openBuild(name, mode === "edit" ? "edit" : "build");
   }
 
@@ -968,20 +1417,21 @@
       b.classList.toggle("on", b.dataset.mode === S.mode);
       if (EMBED && b.dataset.mode === "world") b.style.display = "none";
     });
-    const inBuild = S.mode !== "world" && !!S.b;
-    $("#faces").style.display = $("#faces-lbl").style.display = inBuild ? "" : "none";
-    if (inBuild) {
+    const ib = inBuild();
+    $("#faces").style.display = $("#faces-lbl").style.display = ib ? "" : "none";
+    if (ib) {
       $("#faces-lbl").textContent = `${S.book.subject || "Front"} faces`;
       document.querySelectorAll("#faces button").forEach((b) => b.classList.toggle("on", b.dataset.f === S.facing));
     }
-    $("#cutbox").style.display = $("#stepnav").style.display = inBuild ? "" : "none";
+    $("#cutbox").style.display = $("#stepnav").style.display = ib ? "" : "none";
     $("#hotbar").classList.toggle("on", S.mode === "edit");
     if (S.mode === "edit") renderHotbar();
     if (S.b) $("#build-select").value = S.b.name;
     renderHeader();
     renderPills();
-    if (inBuild) updateStepUI();
+    if (ib) updateStepUI();
     renderTabs();
+    requestRender();
   }
 
   // ---------------------------------------------------------------- side panel
@@ -1009,23 +1459,12 @@
     const key = S.b && S.mode !== "world" && S.tab === (S.book.subject || "Areas") ? "Subject" : S.tab;
     if (PANES[key]) PANES[key](p);
     p.scrollTop = keep;
-    if (S.b && S.mode !== "world") updateStepUI();
   }
   const swatchFor = (key) => {
     const c = atlas.swatch(pal.v(pal.variant(key)).tiles[4], 20);
     c.className = "sw";
     return c;
   };
-  function areaCount(a) {
-    let n = 0;
-    for (const [k, c] of S.cells) {
-      const [x, , z] = k.split(",").map(Number);
-      const inside = x >= a.box[0] && x <= a.box[2] && z >= a.box[1] && z <= a.box[3] &&
-        (!a.ring || x === a.box[0] || x === a.box[2] || z === a.box[1] || z === a.box[3]);
-      if (inside && pal.v(c.v).key !== "air") n++;
-    }
-    return n;
-  }
   const PANES = {
     Builds(p) {
       p.append(el("h2", {}, "Builds in the world"),
@@ -1073,7 +1512,7 @@
           el("div", { class: "row space" }, el("b", {}, a.title),
             a.ring ? null : el("button", { class: "btn", onclick: () => { S.lastView = "area:" + a.key; focusArea(a.key); renderPills(); syncPane(); } }, "Focus")),
           el("div", { style: "margin:4px 0" }, a.desc),
-          el("div", { class: "meta" }, `${w} × ${d}${a.ring ? " edge" : ""} · ${fmt(areaCount(a))} blocks · from marker ${a.box[0] - b.marker[0]},${a.box[1] - b.marker[2]} to ${a.box[2] - b.marker[0]},${a.box[3] - b.marker[2]}`)));
+          el("div", { class: "meta" }, `${w} × ${d}${a.ring ? " edge" : ""} · ${fmt(S.areaInfo[a.key].count)} blocks · from marker ${a.box[0] - b.marker[0]},${a.box[1] - b.marker[2]} to ${a.box[2] - b.marker[0]},${a.box[3] - b.marker[2]}`)));
       }
       if (b.keep_zones.length) {
         p.append(el("h4", {}, "Keep-zones (never touched)"));
@@ -1125,21 +1564,20 @@
       const g = c.getContext("2d");
       g.fillStyle = "#24402c"; g.fillRect(0, 0, c.width, c.height);
       const X = (x) => (x - B.x1 + 1) * s, Z = (z) => (z - B.z1 + 1) * s;
-      const tops = new Map();
-      for (const [k, cc] of S.cells) {
-        const [x, yy, z] = k.split(",").map(Number);
-        if (cc.step > S.step || yy > y) continue;
-        const v = pal.v(cc.v);
-        if (v.key === "air") continue;
-        const kk = x + "," + z, prev = tops.get(kk);
-        if (!prev || yy > prev.y) tops.set(kk, { y: yy, v });
-      }
-      for (const [kk, t] of tops) {
-        const [x, z] = kk.split(",").map(Number);
-        const col = atlas.avg[t.v.tiles[2]];
-        const f = t.y === y ? 1 : Math.max(0.22, 0.55 - (y - t.y) * 0.06);
-        g.fillStyle = `rgb(${(col[0] * f) | 0},${(col[1] * f) | 0},${(col[2] * f) | 0})`;
-        g.fillRect(X(x), Z(z), s, s);
+      // top visible build cell per column, at or below the layer
+      const v = G.vol, layer = v.sx * v.sz, air = pal.table().air;
+      for (let z = B.z1; z <= B.z2; z++) for (let x = B.x1; x <= B.x2; x++) {
+        const col = (z - v.z0) * v.sx + (x - v.x0);
+        if (!G.colCnt[col]) continue;
+        for (let yy = Math.min(y, G.colTop[col]); yy >= G.colBot[col]; yy--) {
+          const i = (yy - v.y0) * layer + col, id = G.bid[i];
+          if (!id || air[id] || v.step[i] > S.step) continue;
+          const cc = atlas.avg[pal.v(id - 1).tiles[2]];
+          const f = yy === y ? 1 : Math.max(0.22, 0.55 - (y - yy) * 0.06);
+          g.fillStyle = `rgb(${(cc[0] * f) | 0},${(cc[1] * f) | 0},${(cc[2] * f) | 0})`;
+          g.fillRect(X(x), Z(z), s, s);
+          break;
+        }
       }
       for (const k of S.b.keep_zones) { g.fillStyle = "rgba(80,170,220,0.45)"; g.fillRect(X(k.box[0]), Z(k.box[1]), (k.box[2] - k.box[0] + 1) * s, (k.box[3] - k.box[1] + 1) * s); }
       const m = S.b.marker;
@@ -1154,26 +1592,33 @@
         const r = c.getBoundingClientRect();
         const x = Math.floor((((e.clientX - r.left) / r.width) * c.width) / s) + B.x1 - 1;
         const z = Math.floor((((e.clientY - r.top) / r.height) * c.height) / s) + B.z1 - 1;
-        const cc = S.cells.get(x + "," + y + "," + z);
+        const j = vol.at(x, y, z), id = j >= 0 ? G.bid[j] : 0;
         const rc = relCoords(x, y, z);
-        info.innerHTML = `from marker <b>${rc.local.join(", ")}</b> · <code>~${rc.cmd.join(" ~")}</code> · ${cc ? pal.v(cc.v).def.name : "empty"}`;
+        info.innerHTML = `from marker <b>${rc.local.join(", ")}</b> · <code>~${rc.cmd.join(" ~")}</code> · ${id ? pal.v(id - 1).def.name : "empty"}`;
       });
       p.append(c, info);
     },
     Commands(p) {
-      const b = S.b;
-      const c = b.commands[S.facing];
+      const b = S.b, f = S.facing;
+      const c = b.commands[f];
       p.append(el("h2", {}, "Commands"),
-        el("p", {}, `Facing ${S.facing}: ${fmt(c.total)} commands to build. Functions live in ${b.name}/${S.facing}/ inside the pack.`));
-      for (const f of ["setup", "test_blocks", ...c.run_order, ...new Set(["build", ...(c.build_parts || [])]), "cleanup"]) {
-        const lines = c.files[f];
+        el("p", {}, `Facing ${f}: ${fmt(c.total)} commands to build. Functions live in ${b.name}/${f}/ inside the pack.`));
+      const files = S.cmdFiles[f];
+      if (!files) {
+        p.append(el("p", { class: "meta" }, "loading command text…"));
+        api.commands(b.name, f).then((all) => { S.cmdFiles[f] = all; if (S.tab === "Commands" && S.facing === f) syncPane(); },
+          (e) => p.append(el("p", { class: "lvl-error" }, "could not load commands: " + e.message)));
+        return;
+      }
+      for (const fn of ["setup", "test_blocks", ...c.run_order, ...new Set(["build", ...(c.build_parts || [])]), "cleanup"]) {
+        const lines = files[fn];
         if (!lines) continue;
-        const pre = el("pre", { style: "display:none" }, lines.join("\n"));
-        const call = `/function ${b.name}/${S.facing}/${f}`;
+        const pre = el("pre", { style: "display:none" });
+        const call = `/function ${b.name}/${f}/${fn}`;
         p.append(el("div", { class: "card" },
           el("div", { class: "row space" }, el("code", {}, call),
-            el("span", { class: "row" }, el("span", { class: "meta", style: "font-family:var(--mono)" }, `${lines.filter((l) => l && !l.startsWith("#")).length} cmds`),
-              el("button", { class: "btn", onclick: () => (pre.style.display = pre.style.display === "none" ? "block" : "none") }, "show"),
+            el("span", { class: "row" }, el("span", { class: "meta", style: "font-family:var(--mono)" }, `${c.sizes[fn]} cmds`),
+              el("button", { class: "btn", onclick: () => { if (!pre.textContent) pre.textContent = lines.join("\n"); pre.style.display = pre.style.display === "none" ? "block" : "none"; } }, "show"),
               el("button", { class: "btn", onclick: () => copy(call) }, "copy"))), pre));
       }
     },
@@ -1244,7 +1689,8 @@
       checkMarks.add(m);
     }
     if (list.length) { const w = list[0]; frame([w[0] - 4, w[1] - 2, w[2] - 4], [w[0] + 4, w[1] + 3, w[2] + 4], -Math.PI * 0.75, -0.5); }
-    setTimeout(() => checkMarks.clear(), 15000);
+    requestRender();
+    setTimeout(() => { checkMarks.clear(); requestRender(); }, 15000);
   }
   async function clearEdits() {
     if (!confirm("Discard every hand edit for this build?")) return;
@@ -1261,52 +1707,78 @@
   }
 
   // ---------------------------------------------------------------- labels
+  // anchors are computed per build and on cut change; each frame only projects them.
+  // Occlusion: at most 2 raycasts per tick, round-robin, until every label has been checked.
   const labelsEl = $("#labels");
-  const labelPool = [], labelOcc = [];
-  let labelT = 0;
-  function updateLabels() {
-    const items = [];
+  const labelPool = [];
+  let anchors = [], occNext = 0, occLeft = 0;
+  function computeAnchors() {
+    anchors = [];
     if (S.labels) {
       if ((S.mode === "world" || !S.b) && S.world) {
-        for (const b of S.world.builds) {
-          let top = S.world.terrain.grade + 2;
-          for (let i = 1; i < b.cells.length; i += 4) top = Math.max(top, b.cells[i]);
-          items.push({ text: b.title, cls: "label build", p: toWorld((b.rect[0] + b.rect[2] + 1) / 2, top + 2.5, (b.rect[1] + b.rect[3] + 1) / 2) });
-        }
+        for (const b of S.world.builds)
+          anchors.push({ text: b.title, cls: "label build", p: toWorld((b.rect[0] + b.rect[2] + 1) / 2, (b.top || S.world.terrain.grade + 2) + 2.5, (b.rect[1] + b.rect[3] + 1) / 2) });
       } else if (S.b) {
         for (const a of S.b.areas) {
           if (a.ring || a.rest || a.label === false) continue;
-          let top = 0;
-          for (const k of S.cells.keys()) {
-            const [x, y, z] = k.split(",").map(Number);
-            if (x >= a.box[0] && x <= a.box[2] && z >= a.box[1] && z <= a.box[3] && y <= S.cut) top = Math.max(top, y);
-          }
-          items.push({ text: a.title, cls: "label", p: toWorld((a.box[0] + a.box[2] + 1) / 2, top + 1.6, (a.box[1] + a.box[3] + 1) / 2) });
+          const top = Math.max(0, Math.min(S.areaInfo[a.key].top, S.cut));
+          anchors.push({ text: a.title, cls: "label", p: toWorld((a.box[0] + a.box[2] + 1) / 2, top + 1.6, (a.box[1] + a.box[3] + 1) / 2) });
         }
       }
     }
-    const w = stage.clientWidth, h = stage.clientHeight;
-    items.forEach((it, i) => {
+    anchors.forEach((it, i) => {
       let e = labelPool[i];
       if (!e) { e = el("div", { class: "label" }); labelsEl.append(e); labelPool.push(e); }
-      const v = it.p.clone().project(camera);
-      const on = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-      e.style.display = on ? "block" : "none";
-      if (!on) return;
-      if (vol && labelT % 4 === i % 4) {   // dim labels hidden behind blocks
-        const d = it.p.clone().sub(camera.position), dist = d.length();
-        const lr = localRay(camera.position, d.normalize());
-        const hit = MC.raycast(vol, pal, lr.o, lr.d, dist);
-        labelOcc[i] = !!(hit && hit.t < dist - 1.5);
-      }
-      e.style.opacity = labelOcc[i] ? 0.35 : 1;
-      e.className = it.cls;
-      e.textContent = it.text;
-      e.style.left = ((v.x + 1) / 2) * w + "px";
-      e.style.top = ((1 - v.y) / 2) * h + "px";
+      e.className = it.cls; e.textContent = it.text; e.style.opacity = 1;
+      it.e = e; it.occ = false;
     });
-    for (let i = items.length; i < labelPool.length; i++) labelPool[i].style.display = "none";
+    for (let i = anchors.length; i < labelPool.length; i++) labelPool[i].style.display = "none";
+    occLeft = anchors.length;
+    requestRender();
   }
+  const pv = new THREE.Vector3();
+  function projectLabels() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    for (const it of anchors) {
+      pv.copy(it.p).project(camera);
+      const on = pv.z < 1 && Math.abs(pv.x) < 1.1 && Math.abs(pv.y) < 1.1;
+      it.on = on;
+      it.e.style.display = on ? "block" : "none";
+      if (!on) continue;
+      it.e.style.left = ((pv.x + 1) / 2) * w + "px";
+      it.e.style.top = ((1 - pv.y) / 2) * h + "px";
+    }
+  }
+  function occlusionTick() {
+    if (!occLeft || !vol || !anchors.length) return;
+    for (let k = 0; k < 2 && occLeft > 0; k++, occLeft--) {
+      const it = anchors[occNext++ % anchors.length];
+      if (!it.on) continue;
+      const d = it.p.clone().sub(camera.position), dist = d.length();
+      const lr = localRay(camera.position, d.normalize());
+      const hit = MC.raycast(vol, pal, lr.o, lr.d, dist, true, shown);
+      const occ = !!(hit && hit.t < dist - 1.5);
+      if (occ !== it.occ) { it.occ = occ; it.e.style.opacity = occ ? 0.35 : 1; }
+    }
+  }
+
+  // ---------------------------------------------------------------- perf overlay (P)
+  const perfEl = $("#perf");
+  function togglePerf() { perfEl.classList.toggle("on"); perfText(); }
+  function perfText() {
+    if (!perfEl.classList.contains("on")) return;
+    const mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + " MB" : "n/a";
+    perfEl.textContent = `fps        ${perf.fps.toFixed(0)}\nframe      ${perf.frameMs.toFixed(1)} ms\ndraw calls ${perf.calls}\n` +
+      `triangles  ${fmt(perf.tris)}\nremesh     ${perf.remesh.toFixed(0)} ms${perf.remeshChunks ? ` (${perf.remeshChunks} chunks)` : ""}\nJS heap    ${mem}\n` +
+      `shadows    ${S.shadowQ} ${sun.shadow.mapSize.x}`;
+  }
+  let fpsN = 0, fpsT = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    perf.fps = (fpsN * 1000) / (now - fpsT);
+    fpsN = 0; fpsT = now;
+    perfText();
+  }, 500);
 
   // ---------------------------------------------------------------- live reload
   function live() {
@@ -1336,53 +1808,81 @@
     sel.value = S.b ? S.b.name : "";
   }
 
-  // ---------------------------------------------------------------- loop
-  let last = performance.now(), hoverT = 0;
+  // ---------------------------------------------------------------- loop: renders only when something changed
+  let last = performance.now();
+  function render() {
+    camera.position.copy(S.pos);
+    camera.rotation.set(S.pitch, S.yaw, 0);
+    sky.position.copy(camera.position);
+    const t = performance.now();
+    renderer.render(scene, camera);
+    perf.frameMs = performance.now() - t;
+    perf.calls = renderer.info.render.calls;
+    perf.tris = renderer.info.render.triangles;
+    fpsN++;
+    projectLabels();
+    dirty = false;
+  }
   function loop(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    moveCamera(dt);
-    U.uTime.value = now / 1000;
-    sky.position.copy(camera.position);
-    disc.position.copy(sunDir(TIMES[S.time])).multiplyScalar(1200);
-    disc.lookAt(0, 0, 0);
-    if ((hoverT += dt) > 0.05) { hoverT = 0; updateHover(); }
-    renderer.render(scene, camera);
-    labelT++;
-    updateLabels();
+    if (moveCamera(dt)) cameraMoved();
+    if (camMoved) { camMoved = false; occLeft = anchors.length; }
+    if (shadowDue && now >= shadowDue) { shadowDue = 0; renderer.shadowMap.needsUpdate = true; dirty = true; }
+    if (dirty) render();
+    if (hoverDirty && now - hoverT > 50) { hoverDirty = false; hoverT = now; updateHover(); if (dirty) render(); }
+    occlusionTick();
     requestAnimationFrame(loop);
   }
 
   // ---------------------------------------------------------------- automation API (screenshots, tests)
   Object.assign(window.studio, {
-    setTime, viewPreset, setStep, setCut, focusArea, setFacing,
+    setTime: (t) => { setTime(t); requestRender(); }, viewPreset, setStep, setCut, focusArea, setFacing, setShadowQuality, requestRender,
     toggle: (k, v) => { if (v == null || !!S[k] !== !!v) toggle(k); },
     open: (name, mode) => navigate(name, mode || "build"),
     world: () => navigate(null, "world"),
-    ui: (on) => document.body.classList.toggle("noui", !on),
-    frameNow: () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+    ui: (on) => { document.body.classList.toggle("noui", !on); requestRender(); },
+    frameNow: () => new Promise((r) => { requestRender(); requestAnimationFrame(() => requestAnimationFrame(r)); }),
+    // render now and read the pixels in the same task (preserveDrawingBuffer is off)
+    snapshot: (type = "image/png") => { render(); return canvas.toDataURL(type); },
     pickAt: (x, y) => pick(x, y),
     place: (h) => placeBlock(h), breakAt: (h) => breakBlock(h), undo, redo,
     editState: () => ({ put: [...S.edits.put.values()], remove: [...S.edits.remove] }),
     setSlot: (i, key) => { S.slot = i; if (key) S.hotbar[i] = key; renderHotbar(); },
+    perf: () => Object.assign({}, perf, { heap: performance.memory ? performance.memory.usedJSHeapSize : null,
+      programs: renderer.info.programs.length, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }),
+    remeshAll: () => { meshAll(); applyView(); return perf.remesh; },
+    // triangles per mesh kind (all chunks, whether visible or not)
+    meshStats: () => {
+      const o = {};
+      for (const ch of G.chunks) for (const k of ["solid", "terrain", "under", "water", "behind", "bterrain", "capS", "capT", "capW"])
+        if (ch[k]) o[k] = (o[k] || 0) + ch[k].geometry.index.count / 3;
+      return o;
+    },
     // look in the build's own frame (yaw 0 = toward north); pos is local
     look: (yaw, pitch, pos) => {
       S.yaw = yaw - ((S.turns || 0) * Math.PI) / 2; S.pitch = pitch;
       if (pos) S.pos.copy(toWorld(...pos));
+      cameraMoved();
     },
   });
 
   async function boot() {
+    const B = (perf.boot = { start: performance.now() });
     try {
       resize();
       const pj = await api.palette();
+      B.data = performance.now();
       pal = new MC.Palette(pj, atlas);
       const q = new URL(location.href).searchParams;
       setTime(q.get("time") || "day");
+      setShadowQuality(q.get("shadows") === "high" ? "high" : "low");
       if (q.get("ui") === "0") document.body.classList.add("noui");
       if (!EMBED) { S.world = await api.world().catch(() => null); await refreshBuildList(); }
       else $("#build-select").style.display = "none";
+      B.palette = performance.now();
       await route();
+      B.route = performance.now();
       resize();
       live();
       if (EMBED) setStatus("static export · " + (EMBED.exported || ""));

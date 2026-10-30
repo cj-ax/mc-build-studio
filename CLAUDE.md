@@ -24,8 +24,8 @@ PS5 through a Realm; packs are imported on a phone or PC (`config.json` → `pla
 | `export/sim.py` | Replays the `.mcfunction` files into a simulated world. |
 | `export/checks.py` | Game-rule checks, block counts, replay comparison in all four facings. |
 | `export/pack.py`, `export/plan.py` | `.mcpack` writer (stable UUIDs, version bumps only when content changes, `export/versions.json`), plan maps and pack icon. |
-| `viewer/` | "Build book" viewer: `index.html` + `js/` (three.js r158 and the Michroma / Inter / IBM Plex Mono fonts in `vendor/`), `server.py` (dev server, live reload, saves edits), `static.py` (single-file HTML, fonts inlined), `tools/shoot.js` (headless screenshots), `tools/roundtrip.js` (edit round-trip test). Lighting: shadowing sun, sky environment light, haze, ACES tone mapping, baked voxel sky/block light and AO. |
-| `out/<name>/` | Generated: `model.json` (viewer data), `report.md`, `plan_areas.png`, `plan_top.png`, `pack/`, `<name>.mcpack`, `<name>.html`, `shots/`. `out/world.json`, `out/world_plan.png`. |
+| `viewer/` | "Build book" viewer: `index.html` + `js/` (three.js r158 and the Michroma / Inter / IBM Plex Mono fonts in `vendor/`), `server.py` (dev server, live reload, saves edits), `static.py` (single-file HTML: data, scripts and commands gzip + base64), `tools/shoot.js` (headless screenshots), `tools/roundtrip.js` (edit round-trip test), `tools/bench.js` (performance benchmark). Lighting: shadowing sun, sky environment light, haze, ACES tone mapping, baked voxel sky/block light and AO. |
+| `out/<name>/` | Generated: `model.json` (viewer data), `commands.json` (function text per facing, loaded by the Commands tab), `report.md`, `plan_areas.png`, `plan_top.png`, `pack/`, `<name>.mcpack`, `<name>.html`, `shots/`. `out/world.json`, `out/world_plan.png`. |
 
 ## Commands
 
@@ -40,6 +40,7 @@ python3 studio.py serve            # viewer at http://localhost:8765, rebuilds +
 python3 studio.py html <name>      # out/<name>/<name>.html, self-contained, opens from disk
 python3 studio.py shoot <name> [views]   # out/<name>/shots/*.png (ui approach aerial front back plan night sunset world area:<key>)
 node viewer/tools/roundtrip.js <name> <x> <y> <z> <block>   # place via the viewer, verify edits → rebuild → pack
+node viewer/tools/bench.js out/<name>/<name>.html [--shots DIR] [--at x,z] [--parts]   # viewer benchmark (see below)
 ```
 
 `studio.py build` exits non-zero when any check is an error. Read `out/<name>/report.md`.
@@ -149,6 +150,45 @@ def build(m):
 
 Edits: when the user edits in the viewer, the dev server saves `edits/<name>.json` and rebuilds. Treat
 edits as part of the build: they go through every check; mention any errors they introduce.
+
+## Viewer performance
+
+Rules for `viewer/js/` (they keep a 100k-block build smooth). Run the benchmark whenever the viewer changes:
+`python3 studio.py html outport && node viewer/tools/bench.js out/outport/outport.html --shots out/outport/shots/perf`
+and compare with the last numbers; look at the shots (day, sunset, night, mid step with ghosts, cut-away,
+x-ray, edit) for anything that changed. Budgets on Gannet Cove: idle draw calls 0; setStep, setCut and
+toggles under 16 ms; one edit (and undo) under 50 ms; JS heap under 200 MB; HTML under 2 MB.
+
+- **Render on demand.** Nothing renders unless `requestRender()` was called (camera move, input, UI or data
+  change). Never animate a uniform every frame; the step highlight is a static tint. Idle = zero draw calls.
+- **Shadows** never auto-update: call `requestShadow()` when geometry, step, cut, facing or time changes
+  (a cut-slider drag defers it until the drag settles). Default map 2048, Shadows Low/High in the bar.
+- **Mesh once per build.** Chunks are 32x32 columns in 16-layer sections (`MC.CHUNK`, `MC.SECTION`). Every
+  vertex carries `meta` = (step, cell y, atlas tile). Step, cut, ghost and x-ray are uniforms (`uStep`,
+  `uCut`) and mesh visibility flags in `applyView()`; they must never remesh. Faces cull only against
+  opaque cells (or slab/stair sub-cubes) of the same or an earlier step; faces only a later step hides go
+  to the `behind` meshes, faces only terrain hides to `under` (x-ray), up faces the cell above hides to the
+  cut caps (shown only at the cut layer). Ghosts are the solid meshes drawn again with `ghostMat`.
+  Light is computed once from the finished build; `uOpen` + the per-column sky texture let sky into
+  columns that a hidden step, the cut or x-ray opens.
+- **Edits** go through `setCells()` only (place, break, undo, redo): write the typed arrays, relight
+  columns within 16 blocks, remesh only the sections whose cells or light changed (+1). Bounds and column
+  maps update incrementally. An edit outside the volume rebuilds it (rare).
+- **No string keys or per-cell objects in hot paths.** Cells live in typed arrays indexed by volume
+  position (`G.vol.ids/step/group`, `G.bid`, `G.tid`); per-column maps (`colTop/colBot/colCnt/colAny`)
+  serve bounds, areas, labels and the Layers tab.
+- **Labels**: anchors are computed per build and on cut change; frames only project them; occlusion is at
+  most 2 raycasts per frame, round-robin. Hover raycasts only after the mouse or camera moved, and the
+  readout DOM changes only when the hovered block does.
+- **Mesher** writes into reused growable typed buffers (no per-vertex allocation) and greedy-merges evenly
+  lit cube faces; give geometry its bounds from the chunk instead of computing them.
+- **Renderer**: pixel ratio at most 1.5, antialias only at ratio 1, `preserveDrawingBuffer` off
+  (`studio.snapshot()` renders and reads in one task).
+- **Static export**: model JSON and the scripts are gzip + base64, cells are run-length int32 columns,
+  command text is inflated only when the Commands tab opens. No raw JSON blobs in the page.
+- Perf overlay: **P** (fps, frame ms, draw calls, triangles, last remesh, JS heap). `studio.perf()`,
+  `studio.meshStats()` for scripts. Headless numbers come from software WebGL on a shared CPU: compare
+  JS times run to run, and treat frame times as an upper bound.
 
 ## Things to confirm in game (not verifiable offline)
 
