@@ -70,8 +70,20 @@ to screenshot in headless software WebGL; run `shoot` in the background.
 - **Terraces**: `GRADES = [dict(box=(x1, z1, x2, z2), y=3, name=...)]` raises the ground (feet level `y`)
   over a box; site prep clears above and fills below each terrace's own grade. Use `retaining_wall` +
   `terrace_stairs` at the terrace edges. `TEST_STRIP = (x, z)` moves the test_blocks strip off the site.
-- **Areas**: `dict(key, title, box=(x1, z1, x2, z2), desc, ring=False)`; must not overlap (`ring=True`
-  covers only the edge cells, e.g. a perimeter fence). They drive the plan map, info cards and labels.
+- **Natural ground**: `HEIGHTMAP = {(x, z): feet_level}` gives every cell its own ground height (overrides
+  GRADES). Site prep clears the site above y=0, fills holes, then raises merged same-height rectangles.
+  Build it with `lib/terrain.py`: `value_noise`, `relax` (no step over 1 block except deliberate cliffs;
+  fixed pads never move), `cliff_faces`, `smooth_line` + `widen` for lanes, `surface`, `scatter`.
+  Level a pad under every building so it sits flat, then relax the rest around it.
+- **Turned buildings**: build a piece facing north in `m.sub()` at its own origin, then
+  `m.stamp(sub, x, z, turns, anchor=rect)`; doors, beds, entities, floors and every directional prop turn
+  with it. `house_lot` does this for a whole furnished house plus garden (`lot_size`, `lot_frames`).
+- **Organic layouts** (see `builds/outport`): lay lanes first, seat lots along them facing the lane (or the
+  water), infill the gaps with smaller buildings joined by footpaths, then scatter nature on what is left.
+  Avoid grids and straight rows; the user prefers irregular, lived-in towns.
+- **Areas**: `dict(key, title, box=(x1, z1, x2, z2), desc, ring=False, rest=False, pill=True, label=True)`;
+  must not overlap (`ring=True` covers only the edge cells; `rest=True` covers whatever no other area does).
+  They drive the plan map, info cards, view pills and labels.
 - Adding a block: add it in `blocks/palette.py` (reuse a shape), run `python3 studio.py palette`;
   it must validate in all four facings before use. Adding a pattern for its texture: `viewer/js/textures.js`.
 
