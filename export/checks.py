@@ -112,12 +112,14 @@ def run_checks(b):
                     max(g["box"][1], h["box"][1]) <= min(g["box"][3], h["box"][3]):
                 add(out, "error", "grades", f"terraces {g['box']} and {h['box']} overlap")
     areas = b.areas
-    acells = [area_cells(a) for a in areas]
+    acells = [area_cells(a, areas) for a in areas]
     for i, a in enumerate(areas):
         ax1, az1, ax2, az2 = a["box"]
         if ax1 < 0 or az1 < 0 or ax2 >= W or az2 >= D:
             add(out, "error", "areas", f"area '{a['key']}' extends outside the footprint")
         for j in range(i + 1, len(areas)):
+            if a.get("rest") or areas[j].get("rest"):
+                continue
             both = acells[i] & acells[j]
             if both:
                 add(out, "error", "areas", f"areas '{a['key']}' and '{areas[j]['key']}' overlap "

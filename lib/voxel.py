@@ -17,6 +17,26 @@ LEFT = {"north": "west", "west": "south", "south": "east", "east": "north"}   # 
 RIGHT = {v: k for k, v in LEFT.items()}
 
 
+def stamp_transform(anchor, x, z, turns, dy=0):
+    """(px, py, pz) -> world pos for a sub-model whose anchor rect lands NW-corner-first at (x, z)."""
+    from lib.palette import rotate_pos
+    ax1, az1, ax2, az2 = anchor
+    corners = [rotate_pos(px, pz, turns) for px, pz in ((ax1, az1), (ax2, az1), (ax1, az2), (ax2, az2))]
+    ox, oz = x - min(c[0] for c in corners), z - min(c[1] for c in corners)
+
+    def T(px, py, pz):
+        rx, rz = rotate_pos(px, pz, turns)
+        return (rx + ox, py + dy, rz + oz)
+    return T
+
+
+def rect_through(T, rect):
+    """World rect (x1, z1, x2, z2) of a sub-frame rect under transform T."""
+    x1, z1, x2, z2 = rect
+    a, b = T(x1, 0, z1), T(x2, 0, z2)
+    return (min(a[0], b[0]), min(a[2], b[2]), max(a[0], b[0]), max(a[2], b[2]))
+
+
 class Cell:
     __slots__ = ("key", "props", "step", "tag", "group")
 
@@ -168,6 +188,52 @@ class Model:
     def floor(self, name, y, x1, z1, x2, z2):
         """Declare a walkable level (y = feet level). Checks require a way to reach it."""
         self.floors.append(dict(name=name, y=y, box=[min(x1, x2), min(z1, z2), max(x1, x2), max(z1, z2)]))
+
+    # ------------------------------------------------------------ sub-models
+    def sub(self):
+        """An empty model sharing this one's steps and current step/tag (build a piece, then stamp it)."""
+        s = Model(self.steps)
+        s._step, s._tag = self._step, self._tag
+        return s
+
+    def stamp(self, sub, x, z, turns=0, anchor=None, dy=0):
+        """Copy `sub` into this model turned `turns` quarter turns clockwise. The anchor rect
+        (x1, z1, x2, z2 in sub coords; default: everything) lands with its north-west corner at
+        (x, z). Doors, beds, entities and floors come along. Returns the transform (x, y, z) -> pos."""
+        from lib.palette import rot_dir, rotate_props
+        if anchor is None:
+            xs = [p[0] for p in sub.cells] or [0]
+            zs = [p[2] for p in sub.cells] or [0]
+            anchor = (min(xs), min(zs), max(xs), max(zs))
+        T = stamp_transform(anchor, x, z, turns, dy)
+
+        gmap = {}
+        for (px, py, pz), c in sub.cells.items():
+            g = None
+            if c.group is not None:
+                g = gmap.setdefault(c.group, self._new_group())
+            pos = T(px, py, pz)
+            self._remove_group_at(pos)
+            self.cells[pos] = Cell(c.key, rotate_props(c.key, c.props, turns), c.step, c.tag, g)
+        for gid, mk in sub.markers.items():
+            mk = dict(mk)
+            mk["pos"] = list(T(*mk["pos"]))
+            if "facing" in mk:
+                mk["facing"] = rot_dir(mk["facing"], turns)
+            self.markers[gmap.get(gid) or self._new_group()] = mk
+        for f in sub.floors:
+            x1, z1, x2, z2 = f["box"]
+            a, b = T(x1, 0, z1), T(x2, 0, z2)
+            self.floor(f["name"], f["y"] + dy, a[0], a[2], b[0], b[2])
+        return T
+
+    def rotated_rect(self, rect, x, z, turns):
+        """Where a sub-model rect ends up for stamp(..., x, z, turns, anchor=rect): (x1, z1, x2, z2)."""
+        x1, z1, x2, z2 = rect
+        w, d = x2 - x1, z2 - z1
+        if turns % 2:
+            w, d = d, w
+        return (x, z, x + w, z + d)
 
     # ------------------------------------------------------------ info
     def bounds(self):

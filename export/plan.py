@@ -75,10 +75,12 @@ def build_plan(b, path, top_view=False, checks=None, s=16):
         Z = pad + (z - z0) * s
         dr.line((pad, Z, pad + (x1 - x0 + 1) * s, Z), fill=(0, 0, 0, 90 if (z - mz) % 5 else 170))
     # areas
-    acells = [area_cells(a) for a in b.areas]
+    acells = [area_cells(a, b.areas) for a in b.areas]
     for i, a in enumerate(b.areas):
         c = _rgb(AREA_COLORS[i % len(AREA_COLORS)])
         ax1, az1, ax2, az2 = a["box"]
+        if a.get("rest"):
+            continue
         if not top_view:
             for (x, z) in acells[i]:
                 dr.rectangle(R(x, z), fill=c[:3] + (90,))
@@ -89,6 +91,8 @@ def build_plan(b, path, top_view=False, checks=None, s=16):
     # collisions
     for i in range(len(b.areas)):
         for j in range(i + 1, len(b.areas)):
+            if b.areas[i].get("rest") or b.areas[j].get("rest"):
+                continue
             for (x, z) in acells[i] & acells[j]:
                 dr.rectangle(R(x, z), fill=(255, 0, 0, 200), outline="red")
     keep_layer()

@@ -65,7 +65,7 @@ def compile_world(builds=None):
                 water.append(dict(name=f"{name}: {k['note'] or 'keep-zone'}",
                                   rect=place_rect(b, origin, facing, *k["box"]),
                                   surface=origin[1] + k["surface"], depth=k["depth"], keep=True))
-        grades = [dict(rect=place_rect(b, origin, facing, *g["box"]), y=origin[1] + g["y"] - 1) for g in b.grades]
+        grades = [dict(rect=place_rect(b, origin, facing, *g["box"]), y=origin[1] + g["y"] - 1) for g in b.grade_rects()]
         out_builds.append(dict(name=name, title=b.title, facing=facing, origin=list(origin), rect=rect,
                                cells=flat, count=len(flat) // 4, marker=list(b.marker), grades=grades,
                                keeps_water=any(k['what'] == 'water' for k in b.keep_zones)))

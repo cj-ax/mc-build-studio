@@ -31,18 +31,29 @@ class Build:
     edit_log: dict = field(default_factory=dict)
     problems: list = field(default_factory=list)
 
-    def grade_at(self, x, z):
-        """Feet level of the ground at (x, z): 0 unless a GRADES terrace covers it."""
-        g = self._gmap.get((x, z)) if hasattr(self, "_gmap") else None
-        if g is None and not hasattr(self, "_gmap"):
+    heightmap: dict = None                         # {(x, z): feet level} from HEIGHTMAP (overrides GRADES)
+
+    @property
+    def gmap(self):
+        if not hasattr(self, "_gmap"):
             self._gmap = {}
             for t in self.grades:
                 x1, z1, x2, z2 = t["box"]
                 for xx in range(x1, x2 + 1):
                     for zz in range(z1, z2 + 1):
                         self._gmap[(xx, zz)] = t["y"]
-            g = self._gmap.get((x, z))
-        return 0 if g is None else g
+            if self.heightmap:
+                self._gmap.update({k: v for k, v in self.heightmap.items()})
+        return self._gmap
+
+    def grade_at(self, x, z):
+        """Feet level of the ground at (x, z): 0 unless a terrace / the heightmap raises it."""
+        return self.gmap.get((x, z), 0)
+
+    def grade_rects(self, include_zero=False):
+        """The ground as non-overlapping rectangles of one grade: [{box, y}] (greedy merge)."""
+        cells = {k: v for k, v in self.gmap.items() if include_zero or v != 0}
+        return merge_grade_rects(cells)
 
     def keep_at(self, x, z):
         for k in self.keep_zones:
@@ -102,7 +113,41 @@ def norm_areas(areas):
     return out
 
 
-def area_cells(a):
+def merge_grade_rects(cells):
+    """{(x, z): y} -> [{box: [x1, z1, x2, z2], y}] covering exactly those cells."""
+    left = dict(cells)
+    out = []
+    for (x, z) in sorted(cells, key=lambda p: (p[1], p[0])):
+        if (x, z) not in left:
+            continue
+        y = left[(x, z)]
+        x2 = x
+        while left.get((x2 + 1, z)) == y:
+            x2 += 1
+        z2 = z
+        while all(left.get((xx, z2 + 1)) == y for xx in range(x, x2 + 1)):
+            z2 += 1
+        for xx in range(x, x2 + 1):
+            for zz in range(z, z2 + 1):
+                del left[(xx, zz)]
+        out.append(dict(box=[x, z, x2, z2], y=y))
+    return out
+
+
+def area_cells(a, others=()):
+    """(x, z) cells an area covers. ring=True: only the edge of its box. rest=True: everything in
+    its box not covered by the other (non-rest) areas."""
+    if a.get("rest"):
+        box = a["box"]
+        taken = set()
+        for o in others:
+            if o is not a and not o.get("rest"):
+                taken |= area_cells(o)
+        return {(x, z) for x in range(box[0], box[2] + 1) for z in range(box[1], box[3] + 1)} - taken
+    return _area_cells(a)
+
+
+def _area_cells(a):
     """(x, z) cells an area covers. ring=True areas cover only the edge of their box."""
     x1, z1, x2, z2 = a["box"]
     return {(x, z) for x in range(x1, x2 + 1) for z in range(z1, z2 + 1)
@@ -136,6 +181,7 @@ def load(name, with_edits=True):
             views=[dict(x) for x in getattr(mod, "VIEWS", [])],
         ),
         grades=[dict(box=list(g["box"]), y=int(g["y"]), name=g.get("name", "")) for g in getattr(mod, "GRADES", [])],
+        heightmap=dict(getattr(mod, "HEIGHTMAP", None) or {}),
         test_strip=tuple(getattr(mod, "TEST_STRIP", ())) or None,
     )
     if with_edits:

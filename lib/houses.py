@@ -270,3 +270,87 @@ def shed(m, x, z, y, w=5, d=4, wall="spruce_planks", roof="spruce"):
     """Small garden shed, door to the north."""
     return clapboard_house(m, x, z, y, w, d, style="gable", wall=wall, trim="dark_oak_planks", roof=roof, storeys=1,
                            h=3, interior=None, porch=False, chimney=None)
+
+
+# ---------------------------------------------------------------- lots that can face any way
+def lot_size(spec):
+    """(claim width, claim depth) in the lot's own frame: house plus 2 around, 4 in front, 3 behind."""
+    return spec["w"] + 4, spec["d"] + 7
+
+
+def lot_frames(spec):
+    w, d = spec["w"], spec["d"]
+    return dict(claim=(-2, -4, w + 1, d + 2), pad=(-2, -4, w + 1, d + 2), walls=(0, 0, w - 1, d - 1))
+
+
+def house_lot(m, X, Z, g, turns, spec, seed=0):
+    """A house with its garden, built facing north in its own frame then turned `turns` quarter
+    turns clockwise and stamped with its claim rect's north-west corner at (X, Z). The lot is
+    flat at feet level g (the caller pads the ground). Returns placement info in world coords."""
+    import random
+    from lib.outdoor import TALL, crop_bed  # noqa: F401
+    from lib.voxel import rect_through, stamp_transform
+    from lib.landmarks import clothesline
+    from lib.harbour import dory
+    from lib.palette import rot_dir
+    r = random.Random(seed)
+    w, d = spec["w"], spec["d"]
+    sub = m.sub()
+    info = clapboard_house(sub, 0, 0, g, w, d, style=spec["style"], wall=spec["wall"],
+                           trim=spec.get("trim", "white_concrete"), roof=spec["roof"],
+                           storeys=spec.get("storeys", 2), h=spec.get("h", 5), cross=spec.get("cross", False),
+                           interior=spec.get("interior", "house"), seed=seed, rug=spec.get("rug", "red"),
+                           veranda=spec.get("veranda", 3), chimney=spec.get("chimney", "bricks"),
+                           every=spec.get("every", 3))
+    dx = info["door"][0]
+    # front: fence with a gate, flowers
+    if spec.get("fence", r.random() < 0.6):
+        fence = spec.get("fence_key", r.choice(["birch_fence", "birch_fence", "spruce_fence", "oak_fence"]))
+        gate = {"birch_fence": "birch_fence_gate", "spruce_fence": "spruce_fence_gate", "oak_fence": "oak_fence_gate"}[fence]
+        for x in range(-2, w + 2):
+            if x == dx:
+                sub.put(x, g, -4, gate, facing="south")
+            elif r.random() > 0.08:
+                sub.put(x, g, -4, fence)
+        for z in range(-3, d + 3):
+            for x in (-2, w + 1):
+                if r.random() > 0.15:
+                    sub.put(x, g, z, fence)
+    for x in range(-1, w + 1):
+        if abs(x - dx) > 1 and sub.empty(x, g, -3) and r.random() < 0.55:
+            sub.put(x, g - 1, -3, "grass_block")
+            sub.put(x, g, -3, r.choice(["allium", "allium", "lilac", "blue_orchid", "poppy", "oxeye_daisy", "cornflower"]))
+    for x in range(-1, w + 1):                    # replant any lilac as a proper two-block plant
+        c = sub.get(x, g, -3)
+        if c is not None and c.key in TALL:
+            sub.clear(x, g, -3)
+            if sub.empty(x, g + 1, -3):
+                sub.tall_plant(x, g, -3, c.key)
+    # back garden: two of veg bed / woodpile / clothesline / dory / shed
+    kinds = spec.get("yard") or r.sample(["veg", "wood", "line", "dory", "shed", "veg"], 2)
+    halves = [(0, w // 2 - 1), (w // 2, w - 1)]
+    for (a, b), kind in zip(halves, kinds):
+        zb = d + 1
+        if kind == "veg" and b - a >= 3:
+            crop_bed(sub, a, zb, b, zb + 1, crop=r.choice(["potatoes", "carrots", "beetroot"]), y=g,
+                     water_rows=[zb])
+        elif kind == "wood":
+            for x in range(a, min(b, a + 4) + 1):
+                for yy in (g, g + 1):
+                    sub.put(x, yy, zb, "spruce_log", axis="x")
+        elif kind == "line" and b - a >= 3:
+            clothesline(sub, a, b, zb, g)
+        elif kind == "dory" and b - a >= 4:
+            sub.put(a, g, zb, "spruce_log", axis="x")
+            sub.put(a + 4, g, zb, "spruce_log", axis="x")
+            dory(sub, a, zb, y=g + 1, along="x", color=r.choice(["blue_concrete", "red_concrete", "yellow_concrete", "green_concrete"]))
+        elif kind == "shed":
+            for k, x in enumerate(range(a + 1, min(b, a + 4))):
+                key = ["barrel", "composter", "barrel"][k % 3]
+                sub.put(x, g, zb, key, **({"facing": "up"} if key == "barrel" else {}))
+    fr = lot_frames(spec)
+    T = stamp_transform(fr["claim"], X, Z, turns)
+    m.stamp(sub, X, Z, turns, anchor=fr["claim"])
+    out_dir = rot_dir("north", turns)
+    return dict(claim=rect_through(T, fr["claim"]), pad=rect_through(T, fr["pad"]), walls=rect_through(T, fr["walls"]),
+                door=T(*info["door"]), front=T(dx, g, -5), out=out_dir, g=g)

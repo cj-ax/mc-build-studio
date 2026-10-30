@@ -131,6 +131,8 @@ def slipway(m, x, z1, z2, y_top=0, width=5, boat_color="blue_concrete"):
     # boat on cradle near the top of the slip
     bz = z2 - 3
     cx = x + width // 2
+    for zz in range(bz - 4, bz + 1, 2):                    # cradle posts down to the seabed
+        piles(m, [(cx, zz)], y_top, -6)
     for zz in range(bz - 4, bz + 1):
         m.put(cx, y_top, zz, "spruce_planks" if zz not in (bz - 4, bz) else "spruce_stairs",
               **({"facing": "north" if zz == bz - 4 else "south"} if zz in (bz - 4, bz) else {}))
@@ -179,3 +181,82 @@ def longliner(m, x0, z0, length=18, hull="red_concrete", stripe="white_concrete"
         for x in (x0 + 12, x0 + 13):                                # fish hold and gear
             m.put(x, 0, z0 - 1, "barrel", facing="up")
         m.put(x0 + 8, 0, z0 + 1, "chest", facing="west")
+
+
+def walkway(m, cells, deck_y=-1, bottom=-6, every=3, deck="spruce_planks", pile="spruce_log", posts=0.15, seed=0):
+    """Narrow stilt walkway over the water along ordered cells (a path from smooth_line/widen)."""
+    r = random.Random(seed)
+    cells = list(cells)
+    # make it 4-connected: a diagonal step gets a corner plank
+    joined = []
+    for c in cells:
+        if joined:
+            px, pz = joined[-1]
+            if abs(c[0] - px) == 1 and abs(c[1] - pz) == 1:
+                joined.append((c[0], pz))
+        joined.append(c)
+    cells = joined
+    for i, (x, z) in enumerate(cells):
+        m.put(x, deck_y, z, deck)
+        if i % every == 0:
+            piles(m, [(x, z)], deck_y, bottom, pile)
+    return cells
+
+
+def mooring_post(m, x, z, top=0, bottom=-6):
+    for y in range(bottom, top):
+        m.put(x, y, z, "spruce_log", axis="y")
+    m.put(x, top, z, "spruce_fence")
+
+
+def rock_mass(m, tops, bottom=-6, seed=0, stones=("stone", "andesite", "cobblestone", "tuff", "granite", "mossy_cobblestone"),
+              moss=0.15):
+    """Columns of mixed rock from the seabed to a per-cell top height: {(x, z): top_y}."""
+    r = random.Random(seed)
+    for (x, z), t in tops.items():
+        for y in range(bottom, t + 1):
+            m.put(x, y, z, r.choice(stones))
+        if t >= -1 and r.random() < moss:
+            m.put(x, t, z, "moss_block")
+
+
+def boathouse(m, x, z, w=9, d=12, deck_y=-1, bottom=-6, wall="red_terracotta", roof="spruce_stairs", boat="blue_concrete",
+              seed=0):
+    """Boathouse on piles: the water (north) end is open, a slip down the middle, a dory inside,
+    side walkways and a back door to the land (south)."""
+    x2, z2 = x + w - 1, z + d - 1
+    xs = sorted({x, x2, x + w // 2 - 2, x + w // 2 + 2})
+    piles(m, [(xx, zz) for xx in xs for zz in range(z, z2 + 1, 3)], deck_y, bottom)
+    cx = x + w // 2
+    for xx in range(x, x2 + 1):
+        for zz in range(z, z2 + 1):
+            if abs(xx - cx) >= 2 or zz == z2:
+                m.put(xx, deck_y, zz, "spruce_planks")
+    f = deck_y + 1
+    for xx in range(x, x2 + 1):
+        for zz in range(z, z2 + 1):
+            edge = xx in (x, x2) or zz == z2
+            open_front = zz == z and abs(xx - cx) <= 1
+            if (edge or zz == z) and not open_front:
+                for yy in range(f, f + 4):
+                    corner = xx in (x, x2) and zz in (z, z2)
+                    m.put(xx, yy, zz, "spruce_planks" if corner else wall)
+            if open_front:
+                m.put(xx, f + 3, zz, wall)
+    for zz in range(z, z2 + 1):
+        for xx in (x, x2):
+            if zz % 3 == 1 and zz not in (z, z2):
+                m.put(xx, f + 1, zz, "glass_pane")
+    _boathouse_roof(m, x, z, x2, z2, f + 4, roof, wall)
+    m.door(cx - 2, f, z2, "north", key="spruce_door")          # back door onto the side walkway
+    dory(m, cx, z + 2, y=-2, along="z", color=boat)
+    m.put(x + 1, f, z2 - 1, "barrel", facing="up")
+    m.put(x2 - 1, f, z2 - 1, "chest", facing="west")
+    m.put(x2 - 1, f, z + 1, "lantern")
+    m.floor("boathouse", f, x + 1, z + 1, x + 1, z2 - 1)
+
+
+def _boathouse_roof(m, x, z, x2, z2, y, roof, wall):
+    """Gable roof with the ridge running out over the water (north-south)."""
+    from lib.roofs import gable_roof
+    gable_roof(m, x, z, x2, z2, y, ridge="z", stairs=roof, cap="spruce_slab", gable=wall, overhang=1, gable_overhang=1)

@@ -1,8 +1,10 @@
 """Build helpers. build.py files do `from lib import *`."""
 from lib.voxel import Model, Cell, DIRV, OPP, LEFT, RIGHT
 from lib.roofs import gable_roof, shed_roof, two_slope_roof, hip_roof, cross_gable
-from lib.houses import clapboard_house, cupola, shed
-from lib.harbour import wharf, finger_pier, stage, flake, rock_pile, dory, slipway, piles, longliner
+from lib.houses import clapboard_house, cupola, shed, house_lot, lot_size, lot_frames
+from lib import terrain
+from lib.harbour import (wharf, finger_pier, stage, flake, rock_pile, dory, slipway, piles, longliner,
+                         walkway, mooring_post, rock_mass, boathouse)
 from lib.landmarks import (lighthouse, church, graveyard, flagpole, root_cellar, wall_cellar, retaining_wall, terrace_stairs,
                            road, clothesline, boulder, disk, ring, gazebo, power_line,
                            awning, pot_stack)
@@ -13,7 +15,8 @@ from lib.outdoor import (deck_on_piles, stair_run, oak_tree, spruce_tree, bush, 
 
 __all__ = ["Model", "Cell", "DIRV", "OPP", "LEFT", "RIGHT", "gable_roof", "shed_roof", "two_slope_roof",
            "hip_roof", "cross_gable", "clapboard_house", "wharf", "finger_pier", "stage", "flake", "rock_pile",
-           "dory", "slipway", "piles", "longliner", "lighthouse", "church", "graveyard", "flagpole", "root_cellar", "wall_cellar",
+           "dory", "slipway", "piles", "longliner", "walkway", "mooring_post", "rock_mass", "boathouse",
+           "house_lot", "lot_size", "lot_frames", "terrain", "lighthouse", "church", "graveyard", "flagpole", "root_cellar", "wall_cellar",
            "retaining_wall", "terrace_stairs", "road", "clothesline", "boulder", "disk", "ring", "interiors",
            "cupola", "shed", "gazebo", "power_line", "awning", "pot_stack",
            "timber_frame", "chimney", "deck_on_piles", "stair_run", "oak_tree", "spruce_tree",

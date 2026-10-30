@@ -219,23 +219,54 @@ def subtract_rect(r, hole):
 
 
 # ---------------------------------------------------------------- per-facing command sets
+def prep_plan(b):
+    """Local-frame site prep: (base rects = site minus keep-zones, grade rects [(rect, grade)])."""
+    if getattr(b, "_prep", None) is None:
+        from lib.build import merge_grade_rects
+        w, d = b.footprint
+        mg = PREP_MARGIN
+        base = [(-mg, -mg, w - 1 + mg, d - 1 + mg)]
+        for k in b.keep_zones:
+            base = [piece for r in base for piece in subtract_rect(r, k["box"])]
+        cells = {}
+        for (x1, z1, x2, z2) in base:
+            for x in range(x1, x2 + 1):
+                for z in range(z1, z2 + 1):
+                    cells[(x, z)] = b.grade_at(x, z)
+        grades = [(tuple(r["box"]), r["y"]) for r in merge_grade_rects(cells)]
+        b._prep = (base, grades)
+    return b._prep
+
+
 def site_rects(b, facing):
-    """Prep regions (relative) as [(rect, grade)]: the site minus keep-zones, split by terrace grade."""
-    w, d = b.footprint
-    mg = PREP_MARGIN
-    holes = [k["box"] for k in b.keep_zones]
-    base = [(-mg, -mg, w - 1 + mg, d - 1 + mg)]
-    out = []
-    for g in b.grades:
-        base = [piece for r in base for piece in subtract_rect(r, g["box"])]
-        rects = [tuple(g["box"])]
-        for h in holes:
-            rects = [piece for r in rects for piece in subtract_rect(r, h)]
-        out += [(r, g["y"]) for r in rects]
-    for h in holes:
-        base = [piece for r in base for piece in subtract_rect(r, h)]
-    out = [(r, 0) for r in base] + out
-    return [(rect_rel(b, facing, *r), g) for r, g in out]
+    """Prep regions (relative) as [(rect, grade)]: the site minus keep-zones, one rect per grade patch."""
+    return [(rect_rel(b, facing, *r), g) for r, g in prep_plan(b)[1]]
+
+
+def site_commands(b, facing, clear_top):
+    """Clear the site above y=0, fill holes below it, then raise every grade patch to its height."""
+    base, grades = prep_plan(b)
+    out = ["# Step 1: Clear and level the land - clear above y=0, fill holes below it, raise the ground "
+           "to its heights. Keep-zones untouched."]
+    for r in base:
+        x1, z1, x2, z2 = rect_rel(b, facing, *r)
+        for bx in split_volume(x1, 0, z1, x2, clear_top, z2):
+            out.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:air")
+        for bx in split_volume(x1, -3, z1, x2, -1, z2):
+            for src in ("minecraft:air", "minecraft:water", "minecraft:flowing_water"):
+                out.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:dirt replace {src}")
+    for r, g in grades:
+        x1, z1, x2, z2 = rect_rel(b, facing, *r)
+        if g <= 0:
+            for bx in split_volume(x1, g - 1, z1, x2, g - 1, z2):
+                out.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:grass_block replace minecraft:dirt")
+            continue
+        if g >= 2:
+            for bx in split_volume(x1, 0, z1, x2, g - 2, z2):
+                out.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:dirt")
+        for bx in split_volume(x1, g - 1, z1, x2, g - 1, z2):
+            out.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:grass_block")
+    return out
 
 
 def commands_for(b, facing):
@@ -246,7 +277,7 @@ def commands_for(b, facing):
     for pos, c in world.items():
         bid, st = states_for(c["key"], c["props"], derived.get(pos))
         bstr[pos] = block_str(bid, st)
-    top = max([p[1] for p in world] + [0])
+    top = max([p[1] for p in world] + [0] + [g for _, g in prep_plan(b)[1]])
     clear_top = top + HEADROOM
     ns = b.name
     files = {}
@@ -268,22 +299,13 @@ def commands_for(b, facing):
                         for name, a in tick],
                       "SETUP_NEXT"]
 
-    prep = [f"# Step 1: Clear and level the land - clear above grade, fill holes below grade "
-            "(terraces raised to their own grade). Keep-zones untouched."]
-    for (x1, z1, x2, z2), g in site_rects(b, facing):
-        if g:
-            prep.append(f"# terrace at +{g}")
-        for bx in split_volume(x1, g, z1, x2, clear_top, z2):
-            prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:air")
-        for bx in split_volume(x1, min(-3, g - 4), z1, x2, g - 2, z2):
-            for src in ("minecraft:air", "minecraft:water", "minecraft:flowing_water"):
-                prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:dirt replace {src}")
-        for bx in split_volume(x1, g - 1, z1, x2, g - 1, z2):
-            for src in ("minecraft:air", "minecraft:water", "minecraft:flowing_water"):
-                prep.append(f"fill {p3(*bx[:3])} {p3(*bx[3:])} minecraft:grass_block replace {src}")
-    files["step01_site"] = prep
-
+    prep = site_commands(b, facing, clear_top)
     step_files = []
+    chunks = [prep[i:i + FUNC_MAX] for i in range(0, len(prep), FUNC_MAX)]
+    for ci, ch in enumerate(chunks):
+        nm = "step01_site" if ci == 0 else f"step01_site_{'abcdefghij'[ci]}"
+        files[nm] = ch
+        step_files.append(nm)
     for si, s in enumerate(b.steps, 1):
         lines = [f"# Step {si + 1}: {s['title']}" + (f" - {s['desc']}" if s["desc"] else "")]
         cells = {p: c for p, c in world.items() if c["step"] == s["key"]}
@@ -311,7 +333,7 @@ def commands_for(b, facing):
             ent.append(f"execute align xyz run summon {mk['id']} ~{x + 0.5:g} ~{y} ~{z + 0.5:g}")
     files["entities"] = ent
 
-    run_order = ["step01_site"] + step_files + ["entities"]
+    run_order = step_files + ["entities"]
     total = sum(len(files[f]) for f in run_order)
     # one call may run at most ~10,000 commands (functionCommandLimit): group the steps into
     # build (if it all fits) or build_1, build_2, ... each under FUNC_MAX

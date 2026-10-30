@@ -909,7 +909,7 @@
     }
     pill("Approach", S.lastView === "approach", view("approach"), "Eye level, from the front");
     pill("Aerial", S.lastView === "aerial", view("aerial"));
-    for (const a of S.b.areas) if (!a.ring && a.pill !== false) pill(a.title, S.lastView === "area:" + a.key, view("area:" + a.key), a.desc);
+    for (const a of S.b.areas) if (!a.ring && !a.rest && a.pill !== false) pill(a.title, S.lastView === "area:" + a.key, view("area:" + a.key), a.desc);
     pill("Plan", S.lastView === "plan", view("plan"), "Straight down, front at the top");
     pill("X-ray ground", S.xray, () => toggle("xray"), "See through the ground (X)");
     pill("Ghost later steps", S.ghost, () => toggle("ghost"), "Show what comes after this step (G)");
@@ -1067,6 +1067,7 @@
       const b = S.b;
       p.append(el("h2", {}, b.title), el("p", {}, b.description || ""));
       for (const a of b.areas) {
+        if (a.rest) continue;
         const w = a.box[2] - a.box[0] + 1, d = a.box[3] - a.box[1] + 1;
         p.append(el("div", { class: "card" + (S.areaOn === a.key ? " on" : "") },
           el("div", { class: "row space" }, el("b", {}, a.title),
@@ -1274,7 +1275,7 @@
         }
       } else if (S.b) {
         for (const a of S.b.areas) {
-          if (a.ring || a.label === false) continue;
+          if (a.ring || a.rest || a.label === false) continue;
           let top = 0;
           for (const k of S.cells.keys()) {
             const [x, y, z] = k.split(",").map(Number);
