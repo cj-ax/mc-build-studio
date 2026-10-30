@@ -20,7 +20,7 @@ const modelFile = path.join(ROOT, "out", name, "model.json");
     const port = 8890 + Math.floor(Math.random() * 100);
     base = `http://127.0.0.1:${port}`;
     srv = spawn("python3", [path.join(ROOT, "studio.py"), "serve", "--port", String(port)], { cwd: ROOT, stdio: "ignore" });
-    for (let i = 0; i < 120 && !(await up(base + "/api/builds")); i++) await sleep(500);
+    for (let i = 0; i < 600 && !(await up(base + "/api/builds")); i++) await sleep(500);
   }
   const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });

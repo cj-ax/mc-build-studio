@@ -507,6 +507,8 @@
         const ao = o1 && o2 ? 0 : 3 - ((o1 ? 1 : 0) + (o2 ? 1 : 0) + (o3 ? 1 : 0));
         CRN[k * 3] = (ss_ * 12) / cnt; CRN[k * 3 + 1] = (bb * 12) / cnt; CRN[k * 3 + 2] = ao;
       }
+      // behind faces show only while the later step next to them is hidden: nothing there to occlude them
+      if (kind === 3 || kind === 4) { CRN[2] = CRN[5] = CRN[8] = CRN[11] = 3; }
       const uniform = CRN[0] === CRN[3] && CRN[0] === CRN[6] && CRN[0] === CRN[9] && CRN[1] === CRN[4] && CRN[1] === CRN[7] &&
         CRN[1] === CRN[10] && CRN[2] === CRN[5] && CRN[2] === CRN[8] && CRN[2] === CRN[11];
       if (uniform) {

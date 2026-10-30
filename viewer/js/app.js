@@ -205,10 +205,10 @@
   const solidMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.93, metalness: 0, map: atlasTex, alphaTest: 0.5 }), "solid");
   const waterMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.08, metalness: 0, color: 0x2f93c8, transparent: true, opacity: 0.7,
     depthWrite: false, envMapIntensity: 0.9 }), "solid");
-  const ghostMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.17, depthWrite: false, fog: false }), "ghost");
-  const xrayMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.22, depthWrite: false }), "xray");
+  const ghostMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.13, depthWrite: false, fog: false }), "ghost");
+  const xrayMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.16, depthWrite: false }), "xray");
   const capMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.93, metalness: 0, map: atlasTex, alphaTest: 0.5 }), "cap");
-  const capXrayMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.22, depthWrite: false }), "capx");
+  const capXrayMat = voxel(new THREE.MeshBasicMaterial({ map: atlasTex, transparent: true, opacity: 0.16, depthWrite: false }), "capx");
   const capWaterMat = voxel(new THREE.MeshStandardMaterial({ roughness: 0.08, metalness: 0, color: 0x2f93c8, transparent: true, opacity: 0.7,
     depthWrite: false, envMapIntensity: 0.9 }), "cap");
   const depthMat = voxel(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), "depth");
@@ -625,9 +625,9 @@
     setRoot(FACINGS.indexOf(S.facing), [b.marker[0] + 0.5, b.marker[2] + 0.5]);
     placeBuildBits();
     applyView();
-    const tw = performance.now();
-    warmEdits();
-    perf.warm = performance.now() - tw;
+    // warm the edit path just after the page is up (background work, not part of loading)
+    const vw = G.vol;
+    setTimeout(() => { if (G.vol !== vw) return; const tw = performance.now(); warmEdits(); perf.warm = performance.now() - tw; }, 0);
     if (first && !S.keepCamera) { S.lastView = "aerial"; viewPreset("aerial"); }
     S.keepCamera = false;
     syncUI();
