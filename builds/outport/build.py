@@ -113,7 +113,7 @@ LANE_LINES = {k: terrain.smooth_line(pts) for k, (pts, _) in LANE_POINTS.items()
 LANES = set()
 for k, (pts, w) in LANE_POINTS.items():
     LANES |= {c for c in terrain.widen(LANE_LINES[k], w) if (c in H0)}
-LANE_BLOCK = terrain.widen(LANES, 3)            # houses keep a block clear of every lane
+LANE_BLOCK = set(LANES)                         # lots may come right up to a lane
 
 # ---------------------------------------------------------------- hand-placed buildings
 SPECIALS = {}
@@ -188,7 +188,7 @@ def cardinal(dx, dz):
 def house_spec(i, r):
     style = r.choices(["saltbox", "gable", "biscuit"], [0.36, 0.38, 0.26])[0]
     wall, colour = COLOURS[i % len(COLOURS)]
-    storeys = 2 if r.random() < 0.82 else (3 if style != "saltbox" else 2)
+    storeys = 3 if (style != "saltbox" and r.random() < 0.25) else 2
     w, d = r.randint(11, 15), r.randint(9, 12)
     if storeys == 3:
         w, d = max(w, 13), max(d, 11)
@@ -207,7 +207,7 @@ hr = random.Random(4)
 for lane in order:
     line = LANE_LINES[lane]
     i = 8
-    while i < len(line) - 6 and len(HOUSES) < 34:
+    while i < len(line) - 6 and len(HOUSES) < 38:
         (ax, az), (bx, bz) = line[i - 4], line[i + 4]
         tx, tz = bx - ax, bz - az
         n = math.hypot(tx, tz) or 1
@@ -230,7 +230,7 @@ for lane in order:
             turns = FACINGS.index(face)
             cw, cd = lot_size(spec)
             rw, rd = (cw, cd) if turns % 2 == 0 else (cd, cw)
-            dist = cd / 2 + 3.5 + extra
+            dist = cd / 2 + 2.5 + extra
             cx, cz = px - ox * dist + (-oz) * lat, pz - oz * dist + ox * lat
             X, Z = int(round(cx - rw / 2)), int(round(cz - rd / 2))
             rect = (X, Z, X + rw - 1, Z + rd - 1)
@@ -264,7 +264,7 @@ ir = random.Random(23)
 cands = [(x + ir.randint(-2, 2), z + ir.randint(-2, 2)) for z in range(SHORE + 14, D - 8, 7) for x in range(6, W - 6, 7)]
 ir.shuffle(cands)
 for (px, pz) in cands:
-    if len(HOUSES) >= 32:
+    if len(HOUSES) >= 38:
         break
     if (px, pz) in blocked:
         continue
@@ -300,6 +300,52 @@ for (px, pz) in cands:
     HOUSES.append(spec)
     FOOTPATHS.append(terrain.smooth_line([(front[0], front[2]), nearest_lane(front[0], front[2])]))
 
+# second pass: small fishermen's cottages tucked into what's left
+ir2 = random.Random(29)
+cands = [(x + ir2.randint(-2, 2), z + ir2.randint(-2, 2)) for z in range(SHORE + 10, D - 6, 5) for x in range(5, W - 5, 5)]
+ir2.shuffle(cands)
+for (px, pz) in cands:
+    if len(HOUSES) >= 46 or (px, pz) in blocked:
+        continue
+    spec = house_spec(len(HOUSES), random.Random(len(HOUSES) * 101 + 7))
+    spec.update(w=9, d=8, storeys=2, h=4, style=ir2.choice(["saltbox", "gable", "gable"]), veranda=0, cross=False)
+    lx, lz = nearest_lane(px, pz)
+    face = "north" if ir2.random() < 0.5 else cardinal(lx - px, lz - pz)
+    turns = FACINGS.index(face)
+    cw, cd = lot_size(spec)
+    rw, rd = (cw, cd) if turns % 2 == 0 else (cd, cw)
+    X, Z = px - rw // 2, pz - rd // 2
+    rect = (X, Z, X + rw - 1, Z + rd - 1)
+    if not free(rect, blocked):
+        continue
+    fr = lot_frames(spec)
+    T = stamp_transform(fr["claim"], X, Z, turns)
+    pad = rect_through(T, fr["pad"])
+    g = pad_level(pad)
+    fix(pad, g)
+    claim(rect)
+    blocked |= {(x, z) for x in range(rect[0], rect[2] + 1) for z in range(rect[1], rect[3] + 1)}
+    front = T(spec["w"] // 2, 0, -5)
+    spec.update(name=NAMES[len(HOUSES) % len(NAMES)], X=X, Z=Z, turns=turns, g=g, rect=rect, lane="footpath",
+                face=face, flavour=FLAVOUR[len(HOUSES) % len(FLAVOUR)], cottage=True)
+    HOUSES.append(spec)
+    FOOTPATHS.append(terrain.smooth_line([(front[0], front[2]), nearest_lane(front[0], front[2])]))
+
+# fish stores and sheds in the last free pockets (5 x 4, door to the nearest lane)
+STORES = []
+for (px, pz) in cands:
+    if len(STORES) >= 24 or (px, pz) in blocked:
+        continue
+    rect = (px - 3, pz - 3, px + 3, pz + 3)
+    if not free(rect, blocked):
+        continue
+    g = pad_level(rect)
+    fix(rect, g)
+    claim(rect)
+    blocked |= {(x, z) for x in range(rect[0], rect[2] + 1) for z in range(rect[1], rect[3] + 1)}
+    STORES.append((px - 2, pz - 2, g, ir2.choice(["red_terracotta", "spruce_planks", "white_concrete", "yellow_terracotta",
+                                                  "blue_concrete"])))
+
 # ---------------------------------------------------------------- settle the ground
 H = {k: (FIXED[k] if k in FIXED else int(round(v))) for k, v in H0.items()}
 terrain.relax(H, FIXED, edge=lambda x, z: None if z < SHORE else 0)
@@ -329,8 +375,11 @@ AREAS = [
 for k, s in SPECIALS.items():
     AREAS.append(dict(key=k, title=s["title"], box=s["claim"], desc=s["desc"],
                       **{f: s[f] for f in ("pill", "label") if f in s}))
+for i, (x, z, g, wall) in enumerate(STORES):
+    AREAS.append(dict(key=f"store{i}", title="Fish store", box=(x - 1, z - 1, x + 5, z + 5), pill=False, label=False,
+                      desc="A fish store: barrels, nets, salt."))
 for h in HOUSES:
-    AREAS.append(dict(key=h["name"].lower(), title=f"The {h['name']} house", box=h["rect"], pill=False, label=False,
+    AREAS.append(dict(key=h["name"].lower() + str(h["X"]), title=f"The {h['name']} house", box=h["rect"], pill=False, label=False,
                       desc=f"{h['colour'].capitalize()} {('cross-gable' if h['cross'] else h['style']).replace('biscuit', 'biscuit box')}, "
                            f"{h['storeys']} storeys, facing {h['face']}. {h['flavour']}"))
 AREAS.append(dict(key="hillside", title="Hillside", box=(0, SHORE, W - 1, D - 1), rest=True, pill=False, label=False,
@@ -348,7 +397,7 @@ STATS = [(str(len(HOUSES)), "houses"), (str(len(HOUSES) + 13), "buildings")]
 
 
 # ====================================================================== building
-def stone_choice(r):
+def stone_choice(r):  # noqa: D401 - kept for helpers that want a random stone
     return r.choice(["stone", "stone", "andesite", "andesite", "cobblestone", "tuff", "granite", "mossy_cobblestone"])
 
 
@@ -373,25 +422,31 @@ def build(m):
 
     # structures in the water, reserved first so rocks keep clear of them
     STAGES = [(3, 24, 9, 11, "red_terracotta", "spruce_planks"), (15, 17, 10, 11, "spruce_planks", "dark_oak_planks"),
-              (40, 22, 9, 12, "white_concrete", "spruce_planks"), (26, 2, 9, 9, "yellow_terracotta", "spruce_planks")]
+              (40, 22, 9, 12, "white_concrete", "spruce_planks"), (26, 2, 9, 9, "yellow_terracotta", "spruce_planks"),
+              (3, 2, 9, 10, "blue_concrete", "white_concrete"), (40, 3, 9, 10, "green_concrete", "spruce_planks")]
     for (x, z, w, d, *_ ) in STAGES:
         reserve(x - 1, z - 1, x + w, z + d)
-    reserve(70, 8, 120, 39)          # wharf, arm, float
+    reserve(70, 4, 120, 39)          # wharf, arms, float
     reserve(120, 2, 152, 39)         # boathouse + marina
     reserve(150, 20, 168, 39)        # pub deck
     reserve(34, 26, 40, 39)          # slipway
+    reserve(51, 3, 68, 18)           # Ryan's premises
+    reserve(2, 35, 50, 38)           # stagehead boardwalk
 
     # ------------------------------------------------------------ rock and shore
     with m.step("rocks"):
         # cliff headland: rock rising from the outer rocks up to the clifftop at the shore
         tops = {}
-        for (x, z, d) in blob(186, 30, 17, 27, seed=5):
+        for (x, z, d) in blob(187, 27, 9, 15, seed=5, rough=0.5):
             if not water(x, z) or (x, z) in taken_water:
                 continue
             land = gh(min(max(x, 0), W - 1), SHORE) - 1
-            k = max(0.0, min(1.0, (z - 8) / (SHORE - 8)))
-            t = round(-1 + (land + 1) * (k ** 1.4) * (1.1 - 0.5 * d) + (N2(x, z) - 0.5) * 3)
-            tops[(x, z)] = max(-1, min(land, t))
+            k = max(0.0, min(1.0, (z - 10) / (SHORE - 10)))
+            t = round(-1 + (land + 2) * (0.35 + 0.65 * k) * max(0.0, 1.15 - d * d) + (N2(x * 1.7, z * 1.7) - 0.5) * 5)
+            tops[(x, z)] = max(-2, min(land + 1, t))
+        for (x, z, d) in blob(176, 33, 6, 6, seed=15, rough=0.6):      # a lower shelf of rock at its foot
+            if water(x, z) and (x, z) not in taken_water and (x, z) not in tops:
+                tops[(x, z)] = max(-2, round(1 - 3 * d + (N2(x, z) - 0.5) * 3))
         rock_mass(m, tops, seed=5)
         # the rock islet
         tops = {(x, z): max(-1, round(2 - 3 * d + (N2(x, z) - 0.5) * 2)) for (x, z, d) in blob(31, 10, 7, 6, seed=6)
@@ -406,8 +461,8 @@ def build(m):
                 if water(x, z) and (x, z) not in taken_water}
         rock_mass(m, tops, seed=7)
         for y in range(1, 5):
-            m.put(59, y, 30, "stone_brick_wall")
-        m.put(59, 5, 30, "lantern")
+            m.put(62, y, 32, "stone_brick_wall")
+        m.put(62, 5, 32, "lantern")
         # rocks awash and shore rocks
         for k in range(26):
             cx, cz = r.randint(2, W - 3), r.randint(4, SHORE - 1)
@@ -442,6 +497,9 @@ def build(m):
         wharf(m, 70, 22, 104, 39, sea_sides=("north", "west"))
         wharf(m, 104, 10, 118, 30, sea_sides=("north", "east", "west"))
         wharf(m, 90, 12, 103, 21, rim=None, sea_sides=("north", "west"))           # co-op float
+        wharf(m, 70, 8, 76, 21, sea_sides=("north", "east", "west"))              # west arm
+        clapboard_house(m, 71, 9, 0, 5, 6, style="gable", wall="white_concrete", trim="spruce_planks", roof="spruce",
+                        storeys=1, h=3, interior=None, porch=False, chimney=None)       # the fuel shed
         for y in range(0, 7):                                                     # crane on the arm
             m.put(116, y, 26, "spruce_log", axis="y")
         for x in range(110, 116):
@@ -451,13 +509,22 @@ def build(m):
         for (x, z, n) in ((72, 24, 3), (86, 23, 2), (106, 28, 3), (112, 12, 2), (92, 14, 3)):
             pot_stack(m, x, z, 0, n=n, seed=x)
         # marina: a crooked main walkway with finger piers
-        main = terrain.widen(terrain.smooth_line([(136, 39), (136, 30), (142, 22), (142, 4)]), 2)
+        main = terrain.widen(terrain.smooth_line([(136, 39), (136, 30), (142, 22), (142, 2)]), 2)
         walkway(m, sorted(main, key=lambda c: -c[1]))
         for line in ([(135, 33), (127, 33)], [(135, 26), (129, 26)], [(143, 18), (151, 18)], [(143, 11), (150, 11)],
                      [(141, 7), (132, 7)]):
             walkway(m, terrain.widen(terrain.smooth_line(line), 2), every=3)
-        for (x, z) in ((126, 34), (151, 17), (150, 10), (131, 6), (128, 25)):
+        for line in ([(143, 4), (148, 4)], [(141, 14), (133, 14)], [(141, 20), (131, 20)]):
+            walkway(m, terrain.widen(terrain.smooth_line(line), 2), every=3)
+        for (x, z) in ((126, 34), (152, 17), (150, 10), (131, 6), (128, 25), (130, 16), (149, 2)):
             mooring_post(m, x, z)
+        # Ryan's premises: an old merchant's wharf on its own out in the harbour
+        wharf(m, 52, 4, 66, 16, sea_sides=("north", "east", "west"))
+        clapboard_house(m, 54, 7, 0, 11, 8, style="gable", wall="red_terracotta", trim="spruce_planks", roof="spruce",
+                        storeys=2, h=4, interior="loft", porch=False, chimney=None, seed=44)
+        for (x, z, n) in ((53, 5, 3), (63, 5, 2)):
+            pot_stack(m, x, z, 0, n=n, seed=x)
+        walkway(m, terrain.smooth_line([(59, 17), (58, 21), (60, 25)]), every=2)
         for k in range(10):
             x, z = r.randint(4, W - 30), r.randint(4, SHORE - 6)
             if all((x + dx, z + dz) not in taken_water for dx in (-1, 0, 1) for dz in (-1, 0, 1)) and m.empty(x, -2, z):
@@ -468,8 +535,27 @@ def build(m):
         for (x, z, w, d, wall, trim) in STAGES:
             stage(m, x, z, w, d, wall=wall, trim=trim)
         for line in ([(7, 35), (7, 39)], [(19, 28), (18, 33), (18, 39)], [(44, 34), (47, 37), (48, 39)],
-                     [(16, 16), (22, 13), (28, 11)], [(40, 21), (36, 14), (35, 11)]):
+                     [(16, 16), (22, 13), (28, 11)], [(40, 21), (36, 14), (35, 11)],
+                     [(7, 12), (8, 18), (7, 23)], [(44, 13), (45, 18), (44, 21)]):
             walkway(m, terrain.smooth_line(line), every=2)
+        # the stagehead boardwalk along the shore, joining every stage's landing
+        walkway(m, terrain.widen(terrain.smooth_line([(2, 37), (12, 37), (26, 36), (33, 37)]), 2), every=3)
+        walkway(m, terrain.widen(terrain.smooth_line([(41, 37), (50, 37)]), 2), every=3)
+        for x in range(4, 50, 6):
+            if m.empty(x, 0, 36) and not m.empty(x, -1, 36):
+                k = r.choice(["barrel", "composter"])
+                m.put(x, 0, 36, k, **({"facing": "up"} if k == "barrel" else {}))
+        # one long stagehead along the shore linking the whole waterfront (skips the slipway, boathouse and pub)
+        for x in range(0, 150):
+            if 34 <= x <= 40 or 119 <= x <= 129:
+                continue
+            for z in (37, 38):
+                if m.empty(x, -1, z) and m.empty(x, 0, z) and m.empty(x, -2, z):
+                    m.put(x, -1, z, "spruce_planks")
+                    if x % 3 == 0 and z == 38:
+                        piles(m, [(x, z)])
+                        if x % 12 == 0:
+                            lamp_post(m, x, 0, z, height=2)
         flake(m, 4, 41, 15, 44, 0, seed=4)
         flake(m, 20, 41, 30, 44, 0, seed=5)
         slipway(m, 35, 27, 41, y_top=0, width=5, boat_color="yellow_concrete")
@@ -484,6 +570,8 @@ def build(m):
                              roof="brick", storeys=2, interior="office", seed=5)
         cupola(m, 110, max(range(15, 22), key=hm["H"]), hm["top"])
         flagpole(m, 117, 12, 0)
+        clapboard_house(m, 92, 13, 0, 8, 6, style="gable", wall="spruce_planks", trim="dark_oak_planks", roof="spruce",
+                        storeys=1, h=4, interior="loft", porch=False, chimney=None, seed=45)      # co-op bait shed
         boathouse(m, 120, 27, 9, 13, wall="red_terracotta")
 
     # ------------------------------------------------------------ the pub over the water
@@ -540,6 +628,11 @@ def build(m):
             terrain.surface(m, cells, H, "dirt_path", {"coarse_dirt": 0.3, "gravel": 0.1}, seed=len(cells),
                             keep=lambda x, z: (x, z) in CLAIMS and not any((x, z) == c for c in fp[:6]))
 
+        for (x, z, g, wall) in STORES:
+            shed(m, x, z, g, w=5, d=4, wall=wall)
+            m.put(x + 1, g + 1, z + 2, "barrel", facing="up")
+            m.put(x + 3, g + 1, z + 2, "cobweb")
+
     # ------------------------------------------------------------ church, school, cellars
     with m.step("church"):
         S = SPECIALS
@@ -582,7 +675,7 @@ def build(m):
         x1, z1, x2, z2 = S["oilhouse"]["walls"]
         clapboard_house(m, x1, z1, S["oilhouse"]["g"], 5, 5, style="gable", wall="stone_bricks", trim="stone_bricks",
                         roof="brick", storeys=1, h=3, interior=None, porch=False, chimney=None)
-        for y in range(-1, 5):                                                     # fog light on the outer rocks
+        for y in range(-6, 5):                                                     # fog light off the headland tip
             for (x, z) in ((186, 9), (187, 9), (186, 10), (187, 10)):
                 m.put(x, y, z, "white_concrete" if y % 3 else "red_concrete")
         m.put(186, 5, 9, "lantern")
@@ -590,6 +683,25 @@ def build(m):
         g = S["lookout"]["g"]
         gazebo(m, (x1 + x2) // 2, (z1 + z2) // 2, g, r=3)
         flagpole(m, x2 - 1, z1, g)
+
+    # ------------------------------------------------------------ picket fences along stretches of the lanes
+    with m.step("lanes"):
+        fr_ = random.Random(31)
+        for lane in ("a", "b", "c", "d", "x1", "x4", "x6"):
+            line = LANE_LINES[lane]
+            on = False
+            for i, (x, z) in enumerate(line):
+                if i % 9 == 0:
+                    on = fr_.random() < 0.45
+                if not on:
+                    continue
+                (ax, az), (bx, bz) = line[max(0, i - 2)], line[min(len(line) - 1, i + 2)]
+                tx, tz = bx - ax, bz - az
+                nrm = math.hypot(tx, tz) or 1
+                for side in (1, -1):
+                    c = (round(x - tz / nrm * 2 * side), round(z + tx / nrm * 2 * side))
+                    if c in H and c not in LANES and c not in CLAIMS and m.empty(c[0], gh(*c), c[1]):
+                        m.put(c[0], gh(*c), c[1], "birch_fence" if lane in ("a", "c", "x4") else "spruce_fence")
 
     # ------------------------------------------------------------ spruce, rock and scrub
     with m.step("wild"):
@@ -600,8 +712,8 @@ def build(m):
             if busy(x, z) or z < SHORE + 4:
                 continue
             edge = min(x, W - 1 - x, D - 1 - z)
-            p = 0.012 + (0.05 if N3(x, z) > 0.6 else 0) + (0.04 if edge < 12 else 0) + (0.02 if z > 120 else 0)
-            if r.random() < p and all(abs(x - a) + abs(z - b) > 4 for a, b in trees[-40:]):
+            p = 0.02 + (0.07 if N3(x, z) > 0.58 else 0) + (0.05 if edge < 12 else 0) + (0.02 if z > 120 else 0)
+            if r.random() < p and all(abs(x - a) + abs(z - b) > 3 for a, b in trees[-60:]):
                 if any(busy(x + dx, z + dz) for dx in (-3, 0, 3) for dz in (-3, 0, 3)):
                     continue
                 trees.append((x, z))
@@ -624,9 +736,8 @@ def build(m):
 
     # ------------------------------------------------------------ boats, lamps, life
     with m.step("life"):
-        longliner(m, 74, 15, hull="red_concrete")
+        longliner(m, 80, 5, hull="red_concrete")
         longliner(m, 152, 13, hull="blue_concrete", stripe="yellow_concrete")
-        longliner(m, 2, 8, hull="green_concrete")
         for (x, z, col) in ((10, 21, "red_concrete"), (52, 22, "blue_concrete"), (128, 29, "yellow_concrete"),
                             (128, 21, "green_concrete"), (144, 14, "orange_concrete"), (133, 3, "red_concrete"),
                             (98, 9, "white_concrete"), (24, 30, "orange_concrete")):

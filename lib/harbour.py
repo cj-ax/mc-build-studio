@@ -209,7 +209,7 @@ def mooring_post(m, x, z, top=0, bottom=-6):
     m.put(x, top, z, "spruce_fence")
 
 
-def rock_mass(m, tops, bottom=-6, seed=0, stones=("stone", "andesite", "cobblestone", "tuff", "granite", "mossy_cobblestone"),
+def rock_mass(m, tops, bottom=-6, seed=0, stones=("stone", "stone", "andesite", "cobblestone", "tuff", "mossy_cobblestone"),
               moss=0.15):
     """Columns of mixed rock from the seabed to a per-cell top height: {(x, z): top_y}."""
     r = random.Random(seed)
